@@ -3455,24 +3455,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
-name = "telemetry-overlay"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "csv",
- "eframe",
- "egui",
- "gstreamer",
- "gstreamer-app",
- "serde",
- "serde_json",
- "tempfile",
- "vello",
- "wgpu 30.0.0",
-]
-
-[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3664,6 +3646,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "track-overlay"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "csv",
+ "eframe",
+ "egui",
+ "gstreamer",
+ "gstreamer-app",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "vello",
+ "wgpu 30.0.0",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 use std::process::Command;
-use telemetry_overlay::video::VideoPlayer;
+use track_overlay::video::VideoPlayer;
 use std::thread::sleep;
 use std::time::Duration;
 

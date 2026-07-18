@@ -1,5 +1,5 @@
 use std::io::Write;
-use telemetry_overlay::telemetry::TelemetryLog;
+use track_overlay::telemetry::TelemetryLog;
 use tempfile::NamedTempFile;
 
 #[test]

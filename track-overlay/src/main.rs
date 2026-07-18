@@ -2,10 +2,10 @@ use eframe::egui;
 use clap::Parser;
 use std::path::PathBuf;
 
-use telemetry_overlay::project::ProjectConfig;
-use telemetry_overlay::telemetry::TelemetryLog;
-use telemetry_overlay::overlay::render_overlay;
-use telemetry_overlay::export::export_video;
+use track_overlay::project::ProjectConfig;
+use track_overlay::telemetry::TelemetryLog;
+use track_overlay::overlay::render_overlay;
+use track_overlay::export::export_video;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
