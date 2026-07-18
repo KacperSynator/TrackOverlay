@@ -6,7 +6,6 @@ pub enum OverlayKind {
     SpeedReadout,
     GForceMeter,
     LapTimer,
-    // Add more types as needed
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,9 +16,22 @@ pub struct OverlayElement {
     pub scale: f32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SyncMode {
+    Manual,
+    Auto,
+}
+
+impl Default for SyncMode {
+    fn default() -> Self {
+        SyncMode::Manual
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SyncState {
     pub offset_ms: i64,
+    pub mode: SyncMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
