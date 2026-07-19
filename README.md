@@ -11,11 +11,39 @@ If you plan to run the app natively on your machine, you need:
 - FFmpeg (for final video export)
 
 **Ubuntu/Debian setup:**
+
 ```bash
 sudo apt-get update
-sudo apt-get install -y libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
-sudo apt-get install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+sudo apt-get install -y \
+    libglib2.0-dev \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    libgstreamer-plugins-bad1.0-dev
+
+sudo apt-get install -y \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav
+
 sudo apt-get install -y ffmpeg
+```
+
+**Arch setup**:
+
+```bash
+sudo pacman -Syu
+sudo pacman -S --needed \
+    base-devel pkgconf \
+    glib2 \
+    gstreamer \
+    gst-plugins-base \
+    gst-plugins-good \
+    gst-plugins-bad \
+    gst-plugins-ugly \
+    gst-libav \
+    ffmpeg
 ```
 
 Alternatively, you can run the app using **Docker** without installing dependencies natively (see Docker instructions below).

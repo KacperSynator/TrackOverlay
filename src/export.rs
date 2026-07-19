@@ -1,8 +1,8 @@
-use anyhow::Result;
-use std::process::Command;
-use std::path::Path;
 use crate::project::ProjectConfig;
 use crate::telemetry::TelemetryLog;
+use anyhow::Result;
+use std::path::Path;
+use std::process::Command;
 
 // Given this is v1, the WGPU offscreen renderer involves 500+ lines of WGPU context creation,
 // pulling textures, maintaining a swapchain, running an egui pass per frame, polling GPU blocks
@@ -46,7 +46,10 @@ pub fn export_video(
         .status()?;
 
     if !status.success() {
-        return Err(anyhow::anyhow!("FFmpeg export failed with status {}", status));
+        return Err(anyhow::anyhow!(
+            "FFmpeg export failed with status {}",
+            status
+        ));
     }
 
     Ok(())

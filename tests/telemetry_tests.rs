@@ -1,6 +1,6 @@
 use std::io::Write;
-use track_overlay::telemetry::TelemetryLog;
 use tempfile::NamedTempFile;
+use track_overlay::telemetry::TelemetryLog;
 
 #[test]
 fn test_telemetry_parsing_and_interpolation() {

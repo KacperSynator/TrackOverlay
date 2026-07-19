@@ -1,7 +1,7 @@
 use std::process::Command;
-use track_overlay::video::VideoPlayer;
 use std::thread::sleep;
 use std::time::Duration;
+use track_overlay::video::VideoPlayer;
 
 #[test]
 fn test_video_decode() {
@@ -9,8 +9,16 @@ fn test_video_decode() {
     let test_vid_path = "/tmp/test_video.mp4";
     let status = Command::new("ffmpeg")
         .args(&[
-            "-y", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=30",
-            "-pix_fmt", "yuv420p", "-c:v", "libx264", test_vid_path,
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=2:size=320x240:rate=30",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:v",
+            "libx264",
+            test_vid_path,
         ])
         .status()
         .expect("Failed to run ffmpeg to create test video");

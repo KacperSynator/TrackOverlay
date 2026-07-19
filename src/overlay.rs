@@ -1,6 +1,6 @@
-use eframe::egui;
 use crate::project::{OverlayElement, OverlayKind};
 use crate::telemetry::TelemetrySample;
+use eframe::egui;
 
 pub fn render_overlay(
     ui: &mut egui::Ui,
@@ -15,7 +15,7 @@ pub fn render_overlay(
     for el in elements.iter_mut() {
         let center = egui::pos2(
             rect.left() + el.x * rect.width(),
-            rect.top() + el.y * rect.height()
+            rect.top() + el.y * rect.height(),
         );
 
         match el.kind {
@@ -35,11 +35,7 @@ pub fn render_overlay(
                 let lon_g = sample.map_or(0.0, |s| s.accel_lon_g);
 
                 let radius = 40.0 * el.scale;
-                painter.circle_stroke(
-                    center,
-                    radius,
-                    egui::Stroke::new(2.0, egui::Color32::WHITE),
-                );
+                painter.circle_stroke(center, radius, egui::Stroke::new(2.0, egui::Color32::WHITE));
 
                 // Dot representing g-force
                 let dot_pos = center + egui::vec2(lat_g * radius, -lon_g * radius);

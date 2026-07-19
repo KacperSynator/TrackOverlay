@@ -3920,6 +3920,7 @@ dependencies = [
  "egui",
  "egui-file-dialog",
  "env_logger",
+ "glib",
  "gstreamer",
  "gstreamer-app",
  "log",
