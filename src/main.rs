@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use egui_file_dialog::FileDialog;
 use log::{info, error, warn};
-use gstreamer::prelude::*;
 
 use track_overlay::project::{ProjectConfig, SyncMode};
 use track_overlay::telemetry::TelemetryLog;
@@ -92,14 +91,16 @@ struct MyApp {
     data_dir: Option<PathBuf>,
     export_progress: Option<String>,
 
-    // File dialog instance
     file_dialog: FileDialog,
-    // Enum to keep track of what the dialog is currently picking
     dialog_mode: DialogMode,
 
     video_player: Option<VideoPlayer>,
     video_texture: Option<egui::TextureHandle>,
     last_seek_ms: i64,
+    video_duration_ms: i64,
+
+    // Extracted lap details
+    telemetry_laps: Vec<(u32, i64)>, // Lap number, start_time_ms
 }
 
 #[derive(PartialEq)]
@@ -131,6 +132,8 @@ impl MyApp {
             video_player: None,
             video_texture: None,
             last_seek_ms: -1,
+            video_duration_ms: 60000,
+            telemetry_laps: Vec::new(),
         }
     }
 }
@@ -140,123 +143,147 @@ impl eframe::App for MyApp {
         let ctx = ui.ctx().clone();
 
         egui::Window::new("Controls").show(&ctx, |ui| {
-            ui.heading("Project Files");
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.heading("Project Files");
 
-            // --- VIDEO FILE PICKER ---
-            ui.horizontal(|ui| {
-                if ui.button("Load Video").clicked() {
-                    info!("Opening file dialog for Video");
-                    self.dialog_mode = DialogMode::PickVideo;
-                    self.file_dialog.pick_file();
+                // --- VIDEO FILE PICKER ---
+                ui.horizontal(|ui| {
+                    if ui.button("Load Video").clicked() {
+                        info!("Opening file dialog for Video");
+                        self.dialog_mode = DialogMode::PickVideo;
+                        self.file_dialog.pick_file();
+                    }
+                    ui.label(self.config.video_path.file_name().unwrap_or_default().to_string_lossy().as_ref());
+                });
+                if let Some(vp) = &self.video_player {
+                    if let Some(dt) = vp.creation_time_utc {
+                        ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+                    }
+                    ui.label(format!("  Duration: {}s", self.video_duration_ms / 1000));
                 }
-                ui.label(self.config.video_path.file_name().unwrap_or_default().to_string_lossy().as_ref());
-            });
-            if let Some(vp) = &self.video_player {
-                if let Some(dt) = vp.creation_time_utc {
-                    ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
-                }
-            }
 
-            // --- TELEMETRY FILE PICKER ---
-            ui.horizontal(|ui| {
-                if ui.button("Load Telemetry").clicked() {
-                    info!("Opening file dialog for Telemetry");
-                    self.dialog_mode = DialogMode::PickTelemetry;
-                    self.file_dialog.pick_file();
-                }
-                ui.label(self.config.telemetry_path.file_name().unwrap_or_default().to_string_lossy().as_ref());
-            });
-            if let Some(telem) = &self.telemetry {
-                if let Some(dt) = telem.start_time_utc {
-                    ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
-                }
-            }
+                ui.add_space(10.0);
 
-            ui.separator();
+                // --- TELEMETRY FILE PICKER ---
+                ui.horizontal(|ui| {
+                    if ui.button("Load Telemetry").clicked() {
+                        info!("Opening file dialog for Telemetry");
+                        self.dialog_mode = DialogMode::PickTelemetry;
+                        self.file_dialog.pick_file();
+                    }
+                    ui.label(self.config.telemetry_path.file_name().unwrap_or_default().to_string_lossy().as_ref());
+                });
+                if let Some(telem) = &self.telemetry {
+                    if let Some(dt) = telem.start_time_utc {
+                        ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+                    }
+                    if !telem.samples.is_empty() {
+                        let telem_dur = telem.samples.last().unwrap().time_ms - telem.samples.first().unwrap().time_ms;
+                        ui.label(format!("  Data Length: {}s", telem_dur / 1000));
+                    }
 
-            ui.heading("Sync");
-            ui.add(egui::Slider::new(&mut self.playhead_ms, 0..=60000).text("Playhead (ms)"));
-
-            ui.horizontal(|ui| {
-                ui.radio_value(&mut self.config.sync.mode, SyncMode::Manual, "Manual Sync");
-                ui.radio_value(&mut self.config.sync.mode, SyncMode::Auto, "Auto Sync");
-            });
-
-            if self.config.sync.mode == SyncMode::Auto {
-                if self.auto_sync_progress.is_none() {
-                    if ui.button("Run Auto-Sync").clicked() {
-                        info!("Starting Auto-Sync...");
-                        let progress = Arc::new(Mutex::new(None));
-                        self.auto_sync_progress = Some(progress.clone());
-
-                        let video_path = self.config.video_path.to_string_lossy().to_string();
-                        let telem_clone = if let Some(t) = &self.telemetry {
-                            TelemetryLog { samples: t.samples.clone(), start_time_utc: t.start_time_utc }
-                        } else {
-                            warn!("No telemetry loaded for Auto-Sync!");
-                            TelemetryLog { samples: vec![], start_time_utc: None }
-                        };
-
-                        thread::spawn(move || {
-                            info!("Extracting GoPro GPS from {}", video_path);
-                            if let Ok(gps_data) = extract_gopro_gps(&video_path) {
-                                info!("Extracted {} GPS points. Running correlation...", gps_data.len());
-                                if let Some(offset) = auto_correlate_gps(&gps_data, &telem_clone) {
-                                    info!("Auto-sync computed offset: {} ms", offset);
-                                    if let Ok(mut lock) = progress.lock() {
-                                        *lock = Some(offset);
+                    if !self.telemetry_laps.is_empty() {
+                        ui.collapsing("Laps", |ui| {
+                            for (lap_num, start_time) in &self.telemetry_laps {
+                                if ui.button(format!("Jump to Lap {} ({}s)", lap_num, start_time / 1000)).clicked() {
+                                    // Jump playhead so that the telemetry playhead aligns with this lap start
+                                    let target_playhead = start_time - self.config.sync.offset_ms;
+                                    if target_playhead >= 0 && target_playhead <= self.video_duration_ms {
+                                        self.playhead_ms = target_playhead;
                                     }
-                                } else {
-                                    warn!("Auto-correlation failed or produced no valid result.");
                                 }
-                            } else {
-                                error!("Failed to extract GoPro GPS data.");
                             }
                         });
                     }
-                } else {
-                    let mut done = false;
-                    if let Ok(lock) = self.auto_sync_progress.as_ref().unwrap().lock() {
-                        if let Some(offset) = *lock {
-                            self.config.sync.offset_ms = offset;
-                            done = true;
-                        }
-                    }
-                    if done {
-                        self.auto_sync_progress = None;
-                    } else {
-                        ui.label("Syncing...");
-                        ui.ctx().request_repaint(); // ensure we re-draw to check progress
-                    }
                 }
 
-                ui.label(format!("Computed offset: {} ms", self.config.sync.offset_ms));
-            } else {
-                ui.add(egui::Slider::new(&mut self.config.sync.offset_ms, -10000..=10000).text("Sync Offset (ms)"));
-            }
+                ui.separator();
 
-            ui.separator();
-            ui.label("Layout Editor");
-            for (_i, el) in self.config.elements.iter_mut().enumerate() {
+                ui.heading("Sync");
+
+                ui.add(egui::Slider::new(&mut self.playhead_ms, 0..=self.video_duration_ms).text("Playhead (ms)"));
+
                 ui.horizontal(|ui| {
-                    ui.label(format!("{:?}", el.kind));
-                    ui.add(egui::Slider::new(&mut el.x, 0.0..=1.0).text("X"));
-                    ui.add(egui::Slider::new(&mut el.y, 0.0..=1.0).text("Y"));
-                    ui.add(egui::Slider::new(&mut el.scale, 0.5..=3.0).text("Scale"));
+                    ui.radio_value(&mut self.config.sync.mode, SyncMode::Manual, "Manual Sync");
+                    ui.radio_value(&mut self.config.sync.mode, SyncMode::Auto, "Auto Sync");
                 });
-            }
 
-            ui.separator();
+                if self.config.sync.mode == SyncMode::Auto {
+                    if self.auto_sync_progress.is_none() {
+                        if ui.button("Run Auto-Sync").clicked() {
+                            info!("Starting Auto-Sync...");
+                            let progress = Arc::new(Mutex::new(None));
+                            self.auto_sync_progress = Some(progress.clone());
 
-            if ui.button("Export Final Video").clicked() {
-                info!("Opening file dialog for Export");
-                self.dialog_mode = DialogMode::PickExportOutput;
-                self.file_dialog.save_file();
-            }
+                            let video_path = self.config.video_path.to_string_lossy().to_string();
+                            let telem_clone = if let Some(t) = &self.telemetry {
+                                TelemetryLog { samples: t.samples.clone(), start_time_utc: t.start_time_utc }
+                            } else {
+                                warn!("No telemetry loaded for Auto-Sync!");
+                                TelemetryLog { samples: vec![], start_time_utc: None }
+                            };
 
-            if let Some(msg) = &self.export_progress {
-                ui.label(msg);
-            }
+                            thread::spawn(move || {
+                                info!("Extracting GoPro GPS from {}", video_path);
+                                if let Ok(gps_data) = extract_gopro_gps(&video_path) {
+                                    info!("Extracted {} GPS points. Running correlation...", gps_data.len());
+                                    if let Some(offset) = auto_correlate_gps(&gps_data, &telem_clone) {
+                                        info!("Auto-sync computed offset: {} ms", offset);
+                                        if let Ok(mut lock) = progress.lock() {
+                                            *lock = Some(offset);
+                                        }
+                                    } else {
+                                        warn!("Auto-correlation failed or produced no valid result.");
+                                    }
+                                } else {
+                                    error!("Failed to extract GoPro GPS data.");
+                                }
+                            });
+                        }
+                    } else {
+                        let mut done = false;
+                        if let Ok(lock) = self.auto_sync_progress.as_ref().unwrap().lock() {
+                            if let Some(offset) = *lock {
+                                self.config.sync.offset_ms = offset;
+                                done = true;
+                            }
+                        }
+                        if done {
+                            self.auto_sync_progress = None;
+                        } else {
+                            ui.label("Syncing...");
+                            ui.ctx().request_repaint(); // ensure we re-draw to check progress
+                        }
+                    }
+
+                    ui.label(format!("Computed offset: {} ms", self.config.sync.offset_ms));
+                } else {
+                    ui.add(egui::Slider::new(&mut self.config.sync.offset_ms, -120000..=120000).text("Sync Offset (ms)"));
+                }
+
+                ui.separator();
+                ui.label("Layout Editor");
+                for (_i, el) in self.config.elements.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{:?}", el.kind));
+                        ui.add(egui::Slider::new(&mut el.x, 0.0..=1.0).text("X"));
+                        ui.add(egui::Slider::new(&mut el.y, 0.0..=1.0).text("Y"));
+                        ui.add(egui::Slider::new(&mut el.scale, 0.5..=3.0).text("Scale"));
+                    });
+                }
+
+                ui.separator();
+
+                if ui.button("Export Final Video").clicked() {
+                    info!("Opening file dialog for Export");
+                    self.dialog_mode = DialogMode::PickExportOutput;
+                    self.file_dialog.save_file();
+                }
+
+                if let Some(msg) = &self.export_progress {
+                    ui.label(msg);
+                }
+            });
         });
 
         // Update the file dialog
@@ -273,11 +300,14 @@ impl eframe::App for MyApp {
                     self.last_seek_ms = -1;
 
                     match VideoPlayer::new(&path_buf) {
-                        Ok(player) => {
+                        Ok(mut player) => {
                             let _ = player.play();
                             let _ = player.pause();
+                            if let Some(dur) = player.duration_ms() {
+                                self.video_duration_ms = dur;
+                            }
                             self.video_player = Some(player);
-                            info!("VideoPlayer initialized");
+                            info!("VideoPlayer initialized with duration {} ms", self.video_duration_ms);
                         }
                         Err(e) => error!("Failed to load video: {}", e),
                     }
@@ -288,6 +318,19 @@ impl eframe::App for MyApp {
                     match TelemetryLog::load_csv(&path_buf) {
                         Ok(log) => {
                             info!("Successfully loaded telemetry: {} samples", log.samples.len());
+
+                            // Extract lap details
+                            self.telemetry_laps.clear();
+                            let mut current_lap = None;
+                            for s in &log.samples {
+                                if let Some(lap) = s.lap_number {
+                                    if Some(lap) != current_lap {
+                                        current_lap = Some(lap);
+                                        self.telemetry_laps.push((lap, s.time_ms));
+                                    }
+                                }
+                            }
+
                             self.telemetry = Some(log);
                         }
                         Err(e) => error!("Failed to load CSV: {}", e),
@@ -327,29 +370,32 @@ impl eframe::App for MyApp {
         // Fetch frame from video player
         if let Some(player) = &mut self.video_player {
             if self.playhead_ms != self.last_seek_ms {
-                let _ = player.seek(self.playhead_ms);
+                if let Err(e) = player.seek(self.playhead_ms) {
+                    warn!("Seek error: {}", e);
+                }
                 self.last_seek_ms = self.playhead_ms;
             }
 
             if let Ok(Some(sample)) = player.get_frame() {
-                let buffer = sample.buffer().unwrap();
-                let map = buffer.map_readable().unwrap();
+                if let Some(buffer) = sample.buffer() {
+                    if let Ok(map) = buffer.map_readable() {
+                        let w = player.width() as usize;
+                        let h = player.height() as usize;
 
-                let w = player.width() as usize;
-                let h = player.height() as usize;
+                        if w > 0 && h > 0 {
+                            let image = egui::ColorImage::from_rgba_unmultiplied(
+                                [w, h],
+                                map.as_slice(),
+                            );
 
-                if w > 0 && h > 0 {
-                    let image = egui::ColorImage::from_rgba_unmultiplied(
-                        [w, h],
-                        map.as_slice(),
-                    );
-
-                    let texture = ui.ctx().load_texture(
-                        "video_frame",
-                        image,
-                        egui::TextureOptions::LINEAR,
-                    );
-                    self.video_texture = Some(texture);
+                            let texture = ui.ctx().load_texture(
+                                "video_frame",
+                                image,
+                                egui::TextureOptions::LINEAR,
+                            );
+                            self.video_texture = Some(texture);
+                        }
+                    }
                 }
             }
         }

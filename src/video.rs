@@ -17,8 +17,6 @@ pub struct VideoPlayer {
 
 impl VideoPlayer {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        // Force GStreamer to use software rendering by disabling VAAPI plugin globally
-        // This avoids the severe DRM fd issues with amdgpu mapping in Docker Wayland environments.
         unsafe {
             std::env::set_var("GST_PLUGIN_FEATURE_RANK", "vaapi*:0");
             std::env::set_var("LIBVA_DRIVER_NAME", "dummy");
@@ -28,7 +26,6 @@ impl VideoPlayer {
 
         let path_str = path.as_ref().to_string_lossy();
 
-        // Attempt to extract creation time using ffprobe
         let mut creation_time_utc = None;
         if let Ok(output) = Command::new("ffprobe")
             .args(&[
@@ -66,8 +63,11 @@ impl VideoPlayer {
                     .build(),
             )
             .drop(true)
-            .max_buffers(1) // Keep memory low
+            .max_buffers(2)
             .build();
+
+        // Essential: make appsink emit frames ASAP, don't wait for clock sync during manual scrubbing
+        appsink.set_property("sync", false);
 
         let pipeline = gstreamer::Pipeline::new();
         pipeline.add_many(&[&source, &videoconvert, appsink.upcast_ref()])?;
@@ -111,24 +111,27 @@ impl VideoPlayer {
         Ok(())
     }
 
-    pub fn seek(&self, time_ms: i64) -> Result<()> {
+    pub fn seek(&mut self, time_ms: i64) -> Result<()> {
         let time = ClockTime::from_mseconds(time_ms as u64);
-        self.pipeline.seek_simple(
-            gstreamer::SeekFlags::FLUSH | gstreamer::SeekFlags::KEY_UNIT,
-            time,
-        )?;
+
+        // Use KEY_UNIT for faster seeking, FLUSH to clear old buffers
+        let flags = gstreamer::SeekFlags::FLUSH | gstreamer::SeekFlags::KEY_UNIT | gstreamer::SeekFlags::ACCURATE;
+
+        self.pipeline.seek_simple(flags, time)?;
+
         Ok(())
     }
 
     pub fn get_frame(&mut self) -> Result<Option<gstreamer::Sample>> {
+        // Only try to query duration if pipeline is in a state where it can respond
         if self.duration.is_none() {
             if let Some(dur) = self.pipeline.query_duration::<ClockTime>() {
                 self.duration = Some(dur);
             }
         }
 
-        // Use a small timeout so the GUI thread doesn't hang forever if GStreamer is stuck
-        let sample = self.appsink.try_pull_sample(gstreamer::ClockTime::from_mseconds(5));
+        // Wait slightly longer (e.g. 50ms) to ensure decoding catches up when seeking manually
+        let sample = self.appsink.try_pull_sample(gstreamer::ClockTime::from_mseconds(50));
 
         if let Some(s) = &sample {
             if self.width == 0 || self.height == 0 {
@@ -140,6 +143,15 @@ impl VideoPlayer {
         }
 
         Ok(sample)
+    }
+
+    pub fn duration_ms(&mut self) -> Option<i64> {
+        if self.duration.is_none() {
+            if let Some(dur) = self.pipeline.query_duration::<ClockTime>() {
+                self.duration = Some(dur);
+            }
+        }
+        self.duration.map(|d| d.mseconds() as i64)
     }
 
     pub fn width(&self) -> u32 {
