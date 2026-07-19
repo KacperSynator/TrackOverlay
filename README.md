@@ -9,7 +9,6 @@ If you plan to run the app natively on your machine, you need:
 - Rust toolchain (stable)
 - GStreamer development libraries
 - FFmpeg (for final video export)
-- Native UI file dialog libraries (e.g., `zenity`, `kdialog`, or portal support for Wayland)
 
 **Ubuntu/Debian setup:**
 ```bash
@@ -26,13 +25,13 @@ Alternatively, you can run the app using **Docker** without installing dependenc
 To launch the `eframe` GUI for syncing your footage and telemetry, simply use:
 
 ```bash
-cargo run --release
+RUST_LOG=info cargo run --release
 ```
 
 You can optionally specify a default directory for loading/saving files using the `--data-dir` argument:
 
 ```bash
-cargo run --release -- --data-dir /path/to/my/videos
+RUST_LOG=info cargo run --release -- --data-dir /path/to/my/videos
 ```
 
 Currently, in GUI mode, you can:
@@ -47,14 +46,14 @@ Currently, in GUI mode, you can:
 If you've already configured your `ProjectConfig` (e.g. by saving it in the GUI or crafting it manually), you can run the batch export pipeline by providing an export flag and destination via the CLI interface.
 
 ```bash
-cargo run --release -- --export final_output.mp4 --project my_project.json
+RUST_LOG=info cargo run --release -- --export final_output.mp4 --project my_project.json
 ```
 
 > Note: The export feature wraps around the `ffmpeg` tool.
 
 ## Using Docker
 
-If you don't want to install dependencies locally, you can build and run `track-overlay` via Docker. The Dockerfile comes pre-installed with `mesa-va-drivers` allowing for hardware acceleration on AMD/Intel GPUs.
+If you don't want to install dependencies locally, you can build and run `track-overlay` via Docker. The Dockerfile comes pre-installed with `mesa-va-drivers` allowing for hardware acceleration on AMD/Intel GPUs. The app uses an embedded `egui` file picker so DBus host permissions aren't strictly required.
 
 ### Building the Docker Image
 
@@ -75,6 +74,7 @@ Use this if you don't need hardware acceleration, or if you run into driver issu
 xhost +local:docker
 docker run --rm \
   -e DISPLAY=$DISPLAY \
+  -e RUST_LOG=info \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v $(pwd)/data:/app/data \
   track-overlay --data-dir /app/data
@@ -83,12 +83,15 @@ docker run --rm \
 #### 2. GPU Accelerated Mode (Radeon/AMD, Intel)
 Passing `--device /dev/dri` exposes your GPU to the container. The Docker image has the necessary `mesa-va-drivers` to utilize VA-API for decoding and rendering.
 
+*(Note: Depending on your host OS and kernel version, you may see a warning like `libEGL warning: egl: failed to create dri2 screen` or `amdgpu: unknown (family_id, chip_external_rev)`. This means your specific GPU architecture is newer than the Mesa drivers in the Debian Bookworm base image. The app will automatically fallback to software rendering if hardware decoding fails).*
+
 **For X11:**
 ```bash
 xhost +local:docker
 docker run --rm \
   --device /dev/dri \
   -e DISPLAY=$DISPLAY \
+  -e RUST_LOG=info \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v $(pwd)/data:/app/data \
   track-overlay --data-dir /app/data
@@ -100,6 +103,7 @@ docker run --rm \
   --device /dev/dri \
   -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
   -e XDG_RUNTIME_DIR=/tmp \
+  -e RUST_LOG=info \
   -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
   -v $(pwd)/data:/app/data \
   track-overlay --data-dir /app/data
@@ -111,6 +115,7 @@ If you just want to export a project and avoid messing with display servers enti
 ```bash
 docker run --rm \
   --device /dev/dri \
+  -e RUST_LOG=info \
   -v $(pwd)/data:/app/data \
   track-overlay --export /app/data/final_output.mp4 --project /app/data/my_project.json
 ```
@@ -120,7 +125,7 @@ docker run --rm \
 ## Tech Stack
 - Language: Rust
 - GUI: `egui` via `eframe`
-- File Picker: `rfd`
+- File Picker: `egui-file-dialog` (Cross-platform, embedded inside egui window)
 - Telemetry parsing: `csv` + `serde`
 - Video playback/decoding: `gstreamer-rs`
 - Sync Strategy: GPMF extraction via `ffprobe` + cross-correlation
