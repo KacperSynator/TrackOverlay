@@ -1,6 +1,6 @@
 # Track Overlay
 
-A desktop app that overlays TrackAddict CSV telemetry (speed, g-force, lap time, GPS position) onto GoPro MP4 footage, with a real-time GPU-rendered preview for syncing video-to-data offset, and a batch export pipeline to render the final video.
+A desktop app that overlays TrackAddict CSV telemetry (speed, g-force, lap time, GPS position) onto GoPro MP4 footage, with a real-time GPU-rendered preview for syncing video-to-data offset, and a batch export pipeline to render the final video. Auto-sync via GoPro GPMF GPS tracking is also supported!
 
 ## Prerequisites
 
@@ -28,7 +28,7 @@ To launch the `eframe` GUI for syncing your footage and telemetry, simply use:
 cargo run --release
 ```
 
-Currently, in GUI mode, you can explore the layout options and adjust the playhead and sync offset.
+Currently, in GUI mode, you can explore the layout options, switch between Auto and Manual sync, adjust the playhead, and sync offset.
 
 ## Exporting Natively
 
@@ -42,7 +42,7 @@ cargo run --release -- --export final_output.mp4
 
 ## Using Docker
 
-If you don't want to install dependencies locally, you can build and run `track-overlay` via Docker.
+If you don't want to install dependencies locally, you can build and run `track-overlay` via Docker. The Dockerfile comes pre-installed with `mesa-va-drivers` allowing for hardware acceleration on AMD/Intel GPUs.
 
 ### Building the Docker Image
 
@@ -54,25 +54,54 @@ docker build -t track-overlay .
 
 ### Running with Docker
 
-Since the app requires X11/Wayland display access for the GUI, you will need to share your display environment with the container. Or, if you only want to use the CLI exporter, you just need to mount your files.
+Because the app is graphical, you must map your display server to the container. How you run it depends on your display server (X11 or Wayland) and whether you want GPU hardware acceleration (VA-API).
 
-**Export Mode (CLI):**
-To mount your local directory and run an export:
+#### 1. Basic GUI Mode (Software Rendering / No GPU access)
+Use this if you don't need hardware acceleration, or if you run into driver issues.
 
-```bash
-docker run --rm -v $(pwd):/app track-overlay --export /app/final_output.mp4
-```
-
-**GUI Mode (X11 Example):**
 ```bash
 xhost +local:docker
 docker run --rm -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v $(pwd):/app track-overlay
 ```
-*(Note: GPU acceleration sharing inside Docker might require additional flags like `--device /dev/dri` depending on your host OS).*
+
+#### 2. GPU Accelerated Mode (Radeon/AMD, Intel)
+Passing `--device /dev/dri` exposes your GPU to the container. The Docker image has the necessary `mesa-va-drivers` to utilize VA-API for decoding and rendering.
+
+**For X11:**
+```bash
+xhost +local:docker
+docker run --rm \
+  --device /dev/dri \
+  -e DISPLAY=$DISPLAY \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v $(pwd):/app \
+  track-overlay
+```
+
+**For Wayland (e.g., Cachy OS default):**
+```bash
+docker run --rm \
+  --device /dev/dri \
+  -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
+  -e XDG_RUNTIME_DIR=/tmp \
+  -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
+  -v $(pwd):/app \
+  track-overlay
+```
+
+#### 3. Export Mode (CLI - No GUI required)
+If you just want to export a project and avoid messing with display servers entirely, you just need to mount your files. You can optionally include `--device /dev/dri` for hardware decoding speedups.
+
+```bash
+docker run --rm --device /dev/dri -v $(pwd):/app track-overlay --export /app/final_output.mp4
+```
+
+*(Note: NVIDIA GPUs require the proprietary `nvidia-container-toolkit` and the `--gpus all` flag instead of `/dev/dri`. The provided Dockerfile uses Mesa drivers, so NVIDIA users will fallback to software decoding unless the image is adapted for CUDA).*
 
 ## Tech Stack
 - Language: Rust
 - GUI: `egui` via `eframe`
 - Telemetry parsing: `csv` + `serde`
 - Video playback/decoding: `gstreamer-rs`
+- Sync Strategy: GPMF extraction via `ffprobe` + cross-correlation
 - Video rendering: FFmpeg (CLI)

@@ -36,6 +36,7 @@ RUN cargo build --release
 # Final lightweight image
 FROM debian:bookworm-slim
 
+# Install runtime dependencies including VA-API drivers for Radeon/Intel hardware acceleration
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     gstreamer1.0-plugins-base \
@@ -43,6 +44,7 @@ RUN apt-get update && apt-get install -y \
     gstreamer1.0-plugins-bad \
     gstreamer1.0-plugins-ugly \
     gstreamer1.0-libav \
+    gstreamer1.0-vaapi \
     ffmpeg \
     libx11-6 \
     libxcursor1 \
@@ -55,6 +57,11 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     libegl1 \
     libfontconfig1 \
+    mesa-va-drivers \
+    libva-drm2 \
+    libva-x11-2 \
+    libva-wayland2 \
+    vainfo \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
