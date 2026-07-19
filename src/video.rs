@@ -17,6 +17,13 @@ pub struct VideoPlayer {
 
 impl VideoPlayer {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+        // Force GStreamer to use software rendering by disabling VAAPI plugin globally
+        // This avoids the severe DRM fd issues with amdgpu mapping in Docker Wayland environments.
+        unsafe {
+            std::env::set_var("GST_PLUGIN_FEATURE_RANK", "vaapi*:0");
+            std::env::set_var("LIBVA_DRIVER_NAME", "dummy");
+        }
+
         gstreamer::init()?;
 
         let path_str = path.as_ref().to_string_lossy();
@@ -120,7 +127,8 @@ impl VideoPlayer {
             }
         }
 
-        let sample = self.appsink.try_pull_sample(gstreamer::ClockTime::from_mseconds(10));
+        // Use a small timeout so the GUI thread doesn't hang forever if GStreamer is stuck
+        let sample = self.appsink.try_pull_sample(gstreamer::ClockTime::from_mseconds(5));
 
         if let Some(s) = &sample {
             if self.width == 0 || self.height == 0 {

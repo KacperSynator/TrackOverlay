@@ -33,9 +33,9 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
     let telem_start = telem_dist.first().unwrap().0;
     let telem_end = telem_dist.last().unwrap().0;
 
-    // We try offsets from -30000ms to 30000ms (30 seconds)
+    // We try offsets from -120000ms to 120000ms (2 minutes)
     // Finding minimum least-squares error of distance.
-    for offset_ms in (-30000..=30000).step_by(100) {
+    for offset_ms in (-120000..=120000).step_by(100) {
         let mut error = 0.0;
         let mut count = 0;
 
