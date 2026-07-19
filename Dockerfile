@@ -1,4 +1,4 @@
-FROM rust:1.96-bookworm AS builder
+FROM rust:1.85-bookworm AS builder
 
 # Install necessary dependencies for GStreamer and egui
 RUN apt-get update && apt-get install -y \

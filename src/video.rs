@@ -1,24 +1,37 @@
 use anyhow::{anyhow, Result};
-use gstreamer::prelude::*;
-use gstreamer::{ClockTime, ElementFactory, MessageView, State};
-use gstreamer_app::AppSink;
 use std::path::Path;
 use std::process::Command;
 use chrono::{DateTime, Utc};
+use ffmpeg_next as ffmpeg;
+use ffmpeg_next::format::context::Input;
+use ffmpeg_next::software::scaling;
+use log::warn;
+
+pub struct DecodedFrame {
+    pub data: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
 
 pub struct VideoPlayer {
-    pipeline: gstreamer::Pipeline,
-    appsink: AppSink,
-    duration: Option<ClockTime>,
+    pub creation_time_utc: Option<DateTime<Utc>>,
+    duration_ms: Option<i64>,
     width: u32,
     height: u32,
-    pub creation_time_utc: Option<DateTime<Utc>>,
+
+    input_ctx: Input,
+    video_stream_index: usize,
+    decoder: ffmpeg::decoder::Video,
+    scaler: scaling::Context,
+    time_base: f64,
+
+    // Track the target PTS when we seek, so we decode forward to the exact frame
+    target_pts: Option<i64>,
 }
 
 impl VideoPlayer {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        gstreamer::init()?;
-
+        ffmpeg::init()?;
         let path_str = path.as_ref().to_string_lossy();
 
         let mut creation_time_utc = None;
@@ -40,194 +53,145 @@ impl VideoPlayer {
             }
         }
 
-        let uri = format!("file://{}", path_str.replace(' ', "%20"));
+        let input_ctx = ffmpeg::format::input(&path)?;
+        let stream = input_ctx
+            .streams()
+            .best(ffmpeg::media::Type::Video)
+            .ok_or_else(|| anyhow!("No video stream found"))?;
 
-        let source = ElementFactory::make("uridecodebin")
-            .property("uri", &uri)
-            .build()
-            .map_err(|e| anyhow!("Failed to create uridecodebin: {}", e))?;
+        let video_stream_index = stream.index();
+        let tb = stream.time_base();
+        let time_base = f64::from(tb.numerator()) / f64::from(tb.denominator());
 
-        let videoconvert = ElementFactory::make("videoconvert")
-            .build()
-            .map_err(|e| anyhow!("Failed to create videoconvert: {}", e))?;
-
-        let appsink = AppSink::builder()
-            .caps(
-                &gstreamer::Caps::builder("video/x-raw")
-                    .field("format", "RGBA")
-                    .build(),
-            )
-            .drop(true)
-            .max_buffers(2)
-            .build();
-
-        // Emit frames as soon as they're decoded; don't wait for pipeline clock sync,
-        // since we're driving playback manually via seeks.
-        appsink.set_property("sync", false);
-
-        let pipeline = gstreamer::Pipeline::new();
-        pipeline.add_many([&source, &videoconvert, appsink.upcast_ref()])?;
-
-        let videoconvert_clone = videoconvert.clone();
-        source.connect_pad_added(move |_src, src_pad| {
-            let is_video = src_pad
-                .current_caps()
-                .and_then(|caps| caps.structure(0).map(|s| s.name().starts_with("video/")))
-                .unwrap_or(false);
-
-            if is_video {
-                let sink_pad = videoconvert_clone.static_pad("sink").unwrap();
-                if sink_pad.is_linked() {
-                    return; // Already linked
-                }
-                if let Err(e) = src_pad.link(&sink_pad) {
-                    eprintln!("Failed to link video pad: {:?}", e);
-                }
-            }
-        });
-
-        gstreamer::Element::link_many([&videoconvert, appsink.upcast_ref()])?;
-
-        // NOTE: we deliberately do NOT use bus.add_watch() here. add_watch() attaches
-        // a GLib source to the default main context, which only gets serviced by an
-        // actual running glib::MainLoop. eframe/egui drives its own event loop, not
-        // GLib's, so an add_watch callback here would silently never fire — state
-        // change failures would show up as opaque StateChangeError with no detail.
-        // Instead, drain_bus_errors() below is called synchronously after every
-        // state change / seek to pull real error messages off the bus.
-
-        let player = Self {
-            pipeline,
-            appsink,
-            duration: None,
-            width: 0,
-            height: 0,
-            creation_time_utc,
+        let duration_ms = if stream.duration() >= 0 {
+            Some((stream.duration() as f64 * time_base * 1000.0) as i64)
+        } else {
+            None
         };
 
-        Ok(player)
+        let codec_ctx = ffmpeg::codec::context::Context::from_parameters(stream.parameters())?;
+        let decoder = codec_ctx.decoder().video()?;
+
+        let width = decoder.width();
+        let height = decoder.height();
+
+        let scaler = scaling::Context::get(
+            decoder.format(),
+            width,
+            height,
+            ffmpeg::format::Pixel::RGBA,
+            width,
+            height,
+            scaling::flag::Flags::FAST_BILINEAR,
+        )?;
+
+        Ok(Self {
+            creation_time_utc,
+            duration_ms,
+            width,
+            height,
+            input_ctx,
+            video_stream_index,
+            decoder,
+            scaler,
+            time_base,
+            target_pts: None,
+        })
     }
 
-    /// Synchronously pop any pending Error/Warning messages off the bus. Must be
-    /// called explicitly (there is no running GLib main loop to do this for us).
-    /// Returns the first error's message text, if any occurred.
-    fn drain_bus_errors(&self) -> Option<String> {
-        let bus = self.pipeline.bus()?;
-        let mut first_error = None;
-        while let Some(msg) = bus.pop() {
-            match msg.view() {
-                MessageView::Error(err) => {
-                    let text = format!(
-                        "{} ({:?}) from {:?}",
-                        err.error(),
-                        err.debug(),
-                        err.src().map(|s| s.path_string())
-                    );
-                    eprintln!("GStreamer error: {}", text);
-                    if first_error.is_none() {
-                        first_error = Some(text);
-                    }
-                }
-                MessageView::Warning(warn) => {
-                    eprintln!(
-                        "GStreamer warning: {} ({:?})",
-                        warn.error(),
-                        warn.debug()
-                    );
-                }
-                _ => {}
-            }
-        }
-        first_error
-    }
-
-    pub fn play(&self) -> Result<()> {
-        self.pipeline.set_state(State::Playing)?;
-        let (result, _, _) = self.pipeline.state(ClockTime::from_seconds(5));
-        if let Err(e) = result {
-            let detail = self.drain_bus_errors();
-            return Err(anyhow!(
-                "Failed to reach PLAYING state: {:?}{}",
-                e,
-                detail.map(|d| format!(" — {}", d)).unwrap_or_default()
-            ));
-        }
-        Ok(())
-    }
-
-    pub fn pause(&self) -> Result<()> {
-        self.pipeline.set_state(State::Paused)?;
-        let (result, _, _) = self.pipeline.state(ClockTime::from_seconds(5));
-        result.map_err(|e| anyhow!("Failed to reach PAUSED state: {:?}", e))?;
-        Ok(())
-    }
+    pub fn play(&self) -> Result<()> { Ok(()) }
+    pub fn pause(&self) -> Result<()> { Ok(()) }
 
     pub fn seek(&mut self, time_ms: i64) -> Result<()> {
-        let time = ClockTime::from_mseconds(time_ms as u64);
+        let target_pts = (time_ms as f64 / 1000.0 / self.time_base) as i64;
+        self.target_pts = Some(target_pts);
 
-        // Seeking requires the pipeline to have at least reached PAUSED (and
-        // completed preroll). If something upstream failed silently, current_state()
-        // will still be NULL/READY here, which is a much clearer signal than the
-        // generic "Failed to seek" gstreamer error alone.
-        let current = self.pipeline.current_state();
-        if current < State::Paused {
-            return Err(anyhow!(
-                "Cannot seek: pipeline is in {:?} state, not yet PAUSED/prerolled. \
-                 Check earlier log output for GStreamer errors during load.",
-                current
-            ));
-        }
-
-        // KEY_UNIT for faster seeking, FLUSH to clear stale buffers, ACCURATE to land
-        // on the exact requested time rather than the nearest keyframe.
-        let flags = gstreamer::SeekFlags::FLUSH
-            | gstreamer::SeekFlags::KEY_UNIT
-            | gstreamer::SeekFlags::ACCURATE;
-
-        self.pipeline
-            .seek_simple(flags, time)
-            .map_err(|e| anyhow!("seek_simple failed at {}ms: {:?}", time_ms, e))?;
-
-        // Seeks are asynchronous too — wait for the pipeline to settle back into a
-        // steady state before the caller tries to pull a frame.
-        let (result, _, _) = self.pipeline.state(ClockTime::from_seconds(5));
-        result.map_err(|e| anyhow!("Failed to settle after seek: {:?}", e))?;
+        // Seek to the nearest keyframe *before* the target
+        self.input_ctx.seek(target_pts, ..target_pts)?;
+        self.decoder.flush();
 
         Ok(())
     }
 
-    pub fn get_frame(&mut self) -> Result<Option<gstreamer::Sample>> {
-        if self.duration.is_none() {
-            if let Some(dur) = self.pipeline.query_duration::<ClockTime>() {
-                self.duration = Some(dur);
+    pub fn get_frame(&mut self) -> Result<Option<DecodedFrame>> {
+        let mut decoded = ffmpeg::frame::Video::empty();
+
+        // Target PTS to hit, if we're seeking
+        let target = self.target_pts.unwrap_or(-1);
+        let mut attempt_limit = 120; // prevent infinite loops if pts is broken
+
+        // Process any frames currently buffered inside the decoder first
+        while self.decoder.receive_frame(&mut decoded).is_ok() {
+            if let Some(pts) = decoded.pts() {
+                if target < 0 || pts >= target {
+                    self.target_pts = None;
+                    return self.process_frame(&decoded);
+                }
             }
         }
 
-        // Give the decoder a more generous window to produce a frame, especially
-        // right after a seek/state change where decode-from-keyframe takes a moment.
-        let sample = self
-            .appsink
-            .try_pull_sample(gstreamer::ClockTime::from_mseconds(500));
+        // Read packets and push to decoder
+        let mut packet_iter = self.input_ctx.packets();
+        while let Some((stream, packet)) = packet_iter.next() {
+            if attempt_limit == 0 {
+                warn!("Seeking timed out looking for PTS >= {}", target);
+                break;
+            }
+            attempt_limit -= 1;
 
-        if let Some(s) = &sample {
-            if self.width == 0 || self.height == 0 {
-                let caps = s.caps().ok_or_else(|| anyhow!("Sample without caps"))?;
-                let s_struct = caps.structure(0).unwrap();
-                self.width = s_struct.get::<i32>("width").unwrap() as u32;
-                self.height = s_struct.get::<i32>("height").unwrap() as u32;
+            if stream.index() == self.video_stream_index {
+                self.decoder.send_packet(&packet)?;
+                while self.decoder.receive_frame(&mut decoded).is_ok() {
+                    if let Some(pts) = decoded.pts() {
+                        if target < 0 || pts >= target {
+                            self.target_pts = None;
+                            return self.process_frame(&decoded);
+                        }
+                    } else {
+                        // If no PTS, just return the frame
+                        self.target_pts = None;
+                        return self.process_frame(&decoded);
+                    }
+                }
             }
         }
 
-        Ok(sample)
+        // If we hit EOF or the loop ended, try flushing the decoder to see if any frames pop out
+        let _ = self.decoder.send_eof();
+        if self.decoder.receive_frame(&mut decoded).is_ok() {
+            self.target_pts = None;
+            return self.process_frame(&decoded);
+        }
+
+        Ok(None)
+    }
+
+    fn process_frame(&mut self, decoded: &ffmpeg::frame::Video) -> Result<Option<DecodedFrame>> {
+        let mut rgb_frame = ffmpeg::frame::Video::empty();
+        self.scaler.run(decoded, &mut rgb_frame)?;
+
+        let width = rgb_frame.width() as usize;
+        let height = rgb_frame.height() as usize;
+        let stride = rgb_frame.stride(0) as usize;
+
+        let mut packed_data = Vec::with_capacity(width * height * 4);
+        let raw_data = rgb_frame.data(0);
+
+        for y in 0..height {
+            let row_start = y * stride;
+            let row_end = row_start + width * 4;
+            packed_data.extend_from_slice(&raw_data[row_start..row_end]);
+        }
+
+        Ok(Some(DecodedFrame {
+            data: packed_data,
+            width: width as u32,
+            height: height as u32,
+        }))
     }
 
     pub fn duration_ms(&mut self) -> Option<i64> {
-        if self.duration.is_none() {
-            if let Some(dur) = self.pipeline.query_duration::<ClockTime>() {
-                self.duration = Some(dur);
-            }
-        }
-        self.duration.map(|d| d.mseconds() as i64)
+        self.duration_ms
     }
 
     pub fn width(&self) -> u32 {
@@ -236,12 +200,5 @@ impl VideoPlayer {
 
     pub fn height(&self) -> u32 {
         self.height
-    }
-}
-
-impl Drop for VideoPlayer {
-    fn drop(&mut self) {
-        // Make sure the pipeline is torn down cleanly rather than left dangling.
-        let _ = self.pipeline.set_state(State::Null);
     }
 }

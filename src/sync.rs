@@ -10,10 +10,7 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
         return None;
     }
 
-    info!(
-        "Preparing Gopro GPS data for correlation ({} points)",
-        gopro_gps.len()
-    );
+    info!("Preparing Gopro GPS data for correlation ({} points)", gopro_gps.len());
 
     // Instead of speeds, we'll try correlating relative distance from origin, which is less noisy.
     let mut gopro_dist = Vec::new();
@@ -55,8 +52,7 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
             }
         }
 
-        if count > gopro_dist.len() / 4 {
-            // Need at least 25% overlap
+        if count > gopro_dist.len() / 4 { // Need at least 25% overlap
             error /= count as f64;
             if error < min_error {
                 min_error = error;
@@ -69,10 +65,7 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
         warn!("Auto-sync failed to find adequate overlap between GPS and telemetry paths.");
         None
     } else {
-        info!(
-            "Auto-sync found best offset {} ms with error {}",
-            best_offset, min_error
-        );
+        info!("Auto-sync found best offset {} ms with error {}", best_offset, min_error);
         Some(best_offset)
     }
 }
@@ -81,8 +74,9 @@ fn haversine(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let r = 6371000.0; // Earth radius in meters
     let d_lat = (lat2 - lat1).to_radians();
     let d_lon = (lon2 - lon1).to_radians();
-    let a = (d_lat / 2.0).sin().powi(2)
-        + lat1.to_radians().cos() * lat2.to_radians().cos() * (d_lon / 2.0).sin().powi(2);
+    let a = (d_lat / 2.0).sin().powi(2) +
+            lat1.to_radians().cos() * lat2.to_radians().cos() *
+            (d_lon / 2.0).sin().powi(2);
     let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
     r * c
 }
