@@ -1,73 +1,73 @@
 use crate::telemetry::TelemetryLog;
+use log::{info, warn};
 
 /// Auto-correlates two GPS traces to find the time offset.
 /// Returns the offset_ms that should be added to the video playhead
 /// to match the telemetry.
 pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLog) -> Option<i64> {
     if gopro_gps.is_empty() || telemetry.samples.is_empty() {
+        warn!("Cannot auto-correlate: missing GPS or Telemetry data");
         return None;
     }
 
-    // Convert both into vectors of distances from start to simplify correlation
-    let mut gopro_speeds = Vec::new();
-    for i in 1..gopro_gps.len() {
-        let (t1, lat1, lon1) = gopro_gps[i-1];
-        let (t2, lat2, lon2) = gopro_gps[i];
+    info!("Preparing Gopro GPS data for correlation ({} points)", gopro_gps.len());
 
-        let dist = haversine(lat1, lon1, lat2, lon2);
-        let dt = (t2 - t1) as f64 / 1000.0;
-        if dt > 0.0 {
-            gopro_speeds.push((t2, dist / dt)); // m/s roughly
-        }
+    // Instead of speeds, we'll try correlating relative distance from origin, which is less noisy.
+    let mut gopro_dist = Vec::new();
+    let (t0, lat0, lon0) = gopro_gps[0];
+    for &(t, lat, lon) in gopro_gps {
+        gopro_dist.push((t - t0, haversine(lat0, lon0, lat, lon)));
     }
 
-    let mut telem_speeds = Vec::new();
+    let mut telem_dist = Vec::new();
+    let sample0 = &telemetry.samples[0];
     for s in &telemetry.samples {
-        telem_speeds.push((s.time_ms, s.speed_kph as f64 / 3.6));
+        telem_dist.push((s.time_ms, haversine(sample0.lat, sample0.lon, s.lat, s.lon)));
     }
 
-    if gopro_speeds.is_empty() || telem_speeds.is_empty() {
-        return None;
-    }
+    info!("Searching for offset...");
 
-    // Very naive cross-correlation of speeds
-    // We slide the GoPro trace across the telemetry trace
     let mut best_offset = 0;
-    let mut max_corr = -1.0;
+    let mut min_error = f64::MAX;
 
-    let telem_start = telem_speeds.first().unwrap().0;
-    let telem_end = telem_speeds.last().unwrap().0;
+    let telem_start = telem_dist.first().unwrap().0;
+    let telem_end = telem_dist.last().unwrap().0;
 
-    // We try offsets from -10000ms to 10000ms
-    for offset_ms in (-10000..=10000).step_by(100) {
-        let mut corr = 0.0;
+    // We try offsets from -30000ms to 30000ms (30 seconds)
+    // Finding minimum least-squares error of distance.
+    for offset_ms in (-30000..=30000).step_by(100) {
+        let mut error = 0.0;
         let mut count = 0;
 
-        for &(gt, gs) in &gopro_speeds {
+        for &(gt, gd) in &gopro_dist {
             let t_target = gt + offset_ms;
             if t_target >= telem_start && t_target <= telem_end {
-                // Find nearest telemetry point (naive linear search for simplicity, can be binary)
-                let nearest = telem_speeds.binary_search_by_key(&t_target, |&(t, _)| t);
+                let nearest = telem_dist.binary_search_by_key(&t_target, |&(t, _)| t);
                 let idx = nearest.unwrap_or_else(|e| e);
-                if idx < telem_speeds.len() {
-                    let ts = telem_speeds[idx].1;
-                    // Product of speeds (cross-correlation)
-                    corr += gs * ts;
+                if idx < telem_dist.len() {
+                    let td = telem_dist[idx].1;
+                    error += (gd - td).powi(2);
                     count += 1;
                 }
             }
         }
 
-        if count > 0 {
-            corr /= count as f64;
-            if corr > max_corr {
-                max_corr = corr;
+        if count > gopro_dist.len() / 4 { // Need at least 25% overlap
+            error /= count as f64;
+            if error < min_error {
+                min_error = error;
                 best_offset = offset_ms;
             }
         }
     }
 
-    Some(best_offset)
+    if min_error == f64::MAX {
+        warn!("Auto-sync failed to find adequate overlap between GPS and telemetry paths.");
+        None
+    } else {
+        info!("Auto-sync found best offset {} ms with error {}", best_offset, min_error);
+        Some(best_offset)
+    }
 }
 
 fn haversine(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {

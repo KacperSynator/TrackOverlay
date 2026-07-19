@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde::Deserialize;
 use std::path::Path;
+use chrono::{DateTime, Utc, TimeZone};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
@@ -35,8 +36,10 @@ pub struct TelemetrySample {
     pub lap_time_ms: Option<i64>,
 }
 
+#[derive(Clone)]
 pub struct TelemetryLog {
     pub samples: Vec<TelemetrySample>,
+    pub start_time_utc: Option<DateTime<Utc>>,
 }
 
 impl TelemetryLog {
@@ -48,12 +51,20 @@ impl TelemetryLog {
         let mut samples = Vec::new();
         let mut lap_start_time = 0.0;
         let mut current_lap = 0;
+        let mut start_time_utc = None;
 
-        for result in rdr.deserialize() {
+        for (i, result) in rdr.deserialize().enumerate() {
             let row: RawTelemetryRow = match result {
                 Ok(r) => r,
                 Err(_) => continue, // Skip malformed rows
             };
+
+            if i == 0 {
+                // Assuming UTC Time is unix timestamp in seconds
+                if let Some(dt) = Utc.timestamp_opt(row.utc_time as i64, ((row.utc_time.fract()) * 1_000_000_000.0) as u32).single() {
+                    start_time_utc = Some(dt);
+                }
+            }
 
             if row.lap != current_lap {
                 current_lap = row.lap;
@@ -74,7 +85,7 @@ impl TelemetryLog {
             });
         }
 
-        Ok(Self { samples })
+        Ok(Self { samples, start_time_utc })
     }
 
     pub fn sample_at(&self, t_ms: i64) -> Option<TelemetrySample> {

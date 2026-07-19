@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use egui_file_dialog::FileDialog;
 use log::{info, error, warn};
+use gstreamer::prelude::*;
 
 use track_overlay::project::{ProjectConfig, SyncMode};
 use track_overlay::telemetry::TelemetryLog;
@@ -12,6 +13,7 @@ use track_overlay::overlay::render_overlay;
 use track_overlay::export::export_video;
 use track_overlay::gpmf_extract::extract_gopro_gps;
 use track_overlay::sync::auto_correlate_gps;
+use track_overlay::video::VideoPlayer;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -48,11 +50,11 @@ fn main() -> eframe::Result {
             info!("Loading telemetry from {:?}", config.telemetry_path);
             TelemetryLog::load_csv(&config.telemetry_path).unwrap_or_else(|e| {
                 error!("Failed to load telemetry: {}", e);
-                TelemetryLog { samples: vec![] }
+                TelemetryLog { samples: vec![], start_time_utc: None }
             })
         } else {
             warn!("Telemetry path does not exist: {:?}", config.telemetry_path);
-            TelemetryLog { samples: vec![] }
+            TelemetryLog { samples: vec![], start_time_utc: None }
         };
 
         info!("Beginning batch export to {:?}", output_path);
@@ -94,6 +96,10 @@ struct MyApp {
     file_dialog: FileDialog,
     // Enum to keep track of what the dialog is currently picking
     dialog_mode: DialogMode,
+
+    video_player: Option<VideoPlayer>,
+    video_texture: Option<egui::TextureHandle>,
+    last_seek_ms: i64,
 }
 
 #[derive(PartialEq)]
@@ -106,7 +112,8 @@ enum DialogMode {
 
 impl MyApp {
     fn new(data_dir: Option<PathBuf>) -> Self {
-        let mut fd = FileDialog::new();
+        let mut fd = FileDialog::new()
+            .default_size([600.0, 400.0]);
 
         if let Some(ref dir) = data_dir {
             fd = fd.initial_directory(dir.clone());
@@ -121,6 +128,9 @@ impl MyApp {
             export_progress: None,
             file_dialog: fd,
             dialog_mode: DialogMode::None,
+            video_player: None,
+            video_texture: None,
+            last_seek_ms: -1,
         }
     }
 }
@@ -141,6 +151,11 @@ impl eframe::App for MyApp {
                 }
                 ui.label(self.config.video_path.file_name().unwrap_or_default().to_string_lossy().as_ref());
             });
+            if let Some(vp) = &self.video_player {
+                if let Some(dt) = vp.creation_time_utc {
+                    ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+                }
+            }
 
             // --- TELEMETRY FILE PICKER ---
             ui.horizontal(|ui| {
@@ -151,6 +166,11 @@ impl eframe::App for MyApp {
                 }
                 ui.label(self.config.telemetry_path.file_name().unwrap_or_default().to_string_lossy().as_ref());
             });
+            if let Some(telem) = &self.telemetry {
+                if let Some(dt) = telem.start_time_utc {
+                    ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+                }
+            }
 
             ui.separator();
 
@@ -171,10 +191,10 @@ impl eframe::App for MyApp {
 
                         let video_path = self.config.video_path.to_string_lossy().to_string();
                         let telem_clone = if let Some(t) = &self.telemetry {
-                            TelemetryLog { samples: t.samples.clone() }
+                            TelemetryLog { samples: t.samples.clone(), start_time_utc: t.start_time_utc }
                         } else {
                             warn!("No telemetry loaded for Auto-Sync!");
-                            TelemetryLog { samples: vec![] }
+                            TelemetryLog { samples: vec![], start_time_utc: None }
                         };
 
                         thread::spawn(move || {
@@ -248,8 +268,19 @@ impl eframe::App for MyApp {
             match self.dialog_mode {
                 DialogMode::PickVideo => {
                     info!("Video file selected: {:?}", path_buf);
-                    self.config.video_path = path_buf;
+                    self.config.video_path = path_buf.clone();
                     self.playhead_ms = 0;
+                    self.last_seek_ms = -1;
+
+                    match VideoPlayer::new(&path_buf) {
+                        Ok(player) => {
+                            let _ = player.play();
+                            let _ = player.pause();
+                            self.video_player = Some(player);
+                            info!("VideoPlayer initialized");
+                        }
+                        Err(e) => error!("Failed to load video: {}", e),
+                    }
                 }
                 DialogMode::PickTelemetry => {
                     info!("Telemetry file selected: {:?}", path_buf);
@@ -266,9 +297,9 @@ impl eframe::App for MyApp {
                     info!("Export destination selected: {:?}", path_buf);
                     let config_clone = self.config.clone();
                     let telem_clone = if let Some(t) = &self.telemetry {
-                        TelemetryLog { samples: t.samples.clone() }
+                        TelemetryLog { samples: t.samples.clone(), start_time_utc: t.start_time_utc }
                     } else {
-                        TelemetryLog { samples: vec![] }
+                        TelemetryLog { samples: vec![], start_time_utc: None }
                     };
 
                     self.export_progress = Some(format!("Exporting to {:?}...", path_buf));
@@ -292,6 +323,58 @@ impl eframe::App for MyApp {
 
         let rect = ui.available_rect_before_wrap();
         ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgb(20, 20, 20));
+
+        // Fetch frame from video player
+        if let Some(player) = &mut self.video_player {
+            if self.playhead_ms != self.last_seek_ms {
+                let _ = player.seek(self.playhead_ms);
+                self.last_seek_ms = self.playhead_ms;
+            }
+
+            if let Ok(Some(sample)) = player.get_frame() {
+                let buffer = sample.buffer().unwrap();
+                let map = buffer.map_readable().unwrap();
+
+                let w = player.width() as usize;
+                let h = player.height() as usize;
+
+                if w > 0 && h > 0 {
+                    let image = egui::ColorImage::from_rgba_unmultiplied(
+                        [w, h],
+                        map.as_slice(),
+                    );
+
+                    let texture = ui.ctx().load_texture(
+                        "video_frame",
+                        image,
+                        egui::TextureOptions::LINEAR,
+                    );
+                    self.video_texture = Some(texture);
+                }
+            }
+        }
+
+        // Draw the video texture if available
+        if let Some(tex) = &self.video_texture {
+            // Keep aspect ratio
+            let aspect = tex.aspect_ratio();
+            let mut w = rect.width();
+            let mut h = w / aspect;
+            if h > rect.height() {
+                h = rect.height();
+                w = h * aspect;
+            }
+
+            let center = rect.center();
+            let video_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
+
+            ui.painter().image(
+                tex.id(),
+                video_rect,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+        }
 
         let sample = self.telemetry.as_ref().and_then(|log| {
             log.sample_at(self.playhead_ms + self.config.sync.offset_ms)

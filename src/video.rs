@@ -3,6 +3,8 @@ use gstreamer::prelude::*;
 use gstreamer::{ElementFactory, State, ClockTime};
 use gstreamer_app::AppSink;
 use std::path::Path;
+use std::process::Command;
+use chrono::{DateTime, Utc};
 
 pub struct VideoPlayer {
     pipeline: gstreamer::Pipeline,
@@ -10,6 +12,7 @@ pub struct VideoPlayer {
     duration: Option<ClockTime>,
     width: u32,
     height: u32,
+    pub creation_time_utc: Option<DateTime<Utc>>,
 }
 
 impl VideoPlayer {
@@ -17,6 +20,27 @@ impl VideoPlayer {
         gstreamer::init()?;
 
         let path_str = path.as_ref().to_string_lossy();
+
+        // Attempt to extract creation time using ffprobe
+        let mut creation_time_utc = None;
+        if let Ok(output) = Command::new("ffprobe")
+            .args(&[
+                "-v", "quiet",
+                "-select_streams", "v:0",
+                "-show_entries", "stream_tags=creation_time",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                &path_str,
+            ])
+            .output()
+        {
+            let time_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !time_str.is_empty() {
+                if let Ok(dt) = DateTime::parse_from_rfc3339(&time_str) {
+                    creation_time_utc = Some(dt.with_timezone(&Utc));
+                }
+            }
+        }
+
         let uri = format!("file://{}", path_str.replace(" ", "%20"));
 
         let source = ElementFactory::make("uridecodebin")
@@ -41,8 +65,6 @@ impl VideoPlayer {
         let pipeline = gstreamer::Pipeline::new();
         pipeline.add_many(&[&source, &videoconvert, appsink.upcast_ref()])?;
 
-        // We link uridecodebin dynamically because it creates pads when it knows the stream type
-        let _pipeline_clone = pipeline.clone();
         let videoconvert_clone = videoconvert.clone();
         source.connect_pad_added(move |_src, src_pad| {
             let is_video = src_pad.current_caps()
@@ -64,8 +86,9 @@ impl VideoPlayer {
             pipeline,
             appsink,
             duration: None,
-            width: 0, // Filled during playback
+            width: 0,
             height: 0,
+            creation_time_utc,
         };
 
         Ok(player)
@@ -92,7 +115,6 @@ impl VideoPlayer {
 
     pub fn get_frame(&mut self) -> Result<Option<gstreamer::Sample>> {
         if self.duration.is_none() {
-            // Try to query duration
             if let Some(dur) = self.pipeline.query_duration::<ClockTime>() {
                 self.duration = Some(dur);
             }
