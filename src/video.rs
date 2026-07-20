@@ -5,10 +5,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use chrono::{DateTime, Utc};
 use ffmpeg_next as ffmpeg;
-use log::warn;
+use log::{warn, error};
 use crossbeam_channel::{unbounded, Sender};
 use lru::LruCache;
 use std::num::NonZeroUsize;
+use eframe::egui;
 
 #[derive(Clone)]
 pub struct DecodedFrame {
@@ -41,9 +42,8 @@ impl Drop for VideoPlayer {
     }
 }
 
-// Ensure the Context and Decoder are created *inside* the spawned thread to avoid Send issues
 impl VideoPlayer {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(path: P, ctx: egui::Context) -> Result<Self> {
         ffmpeg::init()?;
         let path_str = path.as_ref().to_string_lossy().to_string();
 
@@ -84,7 +84,6 @@ impl VideoPlayer {
             None
         };
 
-        // We only extract width and height here, everything else is done inside the thread.
         let codec_ctx = ffmpeg::codec::context::Context::from_parameters(stream.parameters())?;
         let decoder = codec_ctx.decoder().video()?;
         let width = decoder.width();
@@ -97,10 +96,11 @@ impl VideoPlayer {
 
         let path_for_thread = path_str.clone();
 
-        // Spawn background decoding thread
         thread::spawn(move || {
-            // Setup local decoder and scaling context inside the thread
-            let mut input_ctx = ffmpeg::format::input(&path_for_thread).unwrap();
+            let mut input_ctx = match ffmpeg::format::input(&path_for_thread) {
+                Ok(ctx) => ctx,
+                Err(e) => { error!("Failed to open video in bg thread: {}", e); return; }
+            };
             let stream = input_ctx.streams().best(ffmpeg::media::Type::Video).unwrap();
             let codec_ctx = ffmpeg::codec::context::Context::from_parameters(stream.parameters()).unwrap();
             let mut decoder = codec_ctx.decoder().video().unwrap();
@@ -118,23 +118,35 @@ impl VideoPlayer {
             let mut is_playing = false;
             let mut target_pts: Option<i64> = Some(start_pts);
 
-            // Cache ~100 frames (~800MB at 1080p RGBA) to allow butter-smooth scrubbing nearby
             let mut frame_cache: LruCache<i64, DecodedFrame> = LruCache::new(NonZeroUsize::new(100).unwrap());
 
             loop {
-                // Check commands
-                while let Ok(cmd) = if is_playing { cmd_rx.try_recv().map_err(|_| crossbeam_channel::RecvError) } else { cmd_rx.recv() } {
+                let mut cmd_opt = if is_playing {
+                    cmd_rx.try_recv().ok()
+                } else {
+                    if target_pts.is_some() {
+                        cmd_rx.try_recv().ok()
+                    } else {
+                        cmd_rx.recv().ok()
+                    }
+                };
+
+                // Drain any additional commands so we get the very latest seek
+                while let Ok(cmd) = cmd_rx.try_recv() {
+                    cmd_opt = Some(cmd);
+                }
+
+                if let Some(cmd) = cmd_opt {
                     match cmd {
                         PlayerCommand::Play => is_playing = true,
                         PlayerCommand::Pause => is_playing = false,
                         PlayerCommand::Seek(time_ms) => {
                             let seek_pts = start_pts + (time_ms as f64 / 1000.0 / time_base) as i64;
 
-                            // Check cache first!
                             let mut found_cached = None;
                             for (pts, frame) in frame_cache.iter() {
                                 let pts_ms = (*pts as f64 * time_base * 1000.0) as i64;
-                                if (pts_ms - time_ms).abs() < 50 {
+                                if (pts_ms - time_ms).abs() < 100 {
                                     found_cached = Some(frame.clone());
                                     break;
                                 }
@@ -144,9 +156,13 @@ impl VideoPlayer {
                                 if let Ok(mut lf) = latest_frame_bg.lock() {
                                     *lf = Some(frame);
                                 }
-                                target_pts = Some(seek_pts); // we still want to decode forward if playing
+                                ctx.request_repaint();
+                                if is_playing {
+                                    target_pts = Some(seek_pts);
+                                } else {
+                                    target_pts = None;
+                                }
                             } else {
-                                // Real seek required
                                 target_pts = Some(seek_pts);
                                 if input_ctx.seek(seek_pts, ..seek_pts).is_ok() {
                                     decoder.flush();
@@ -158,7 +174,7 @@ impl VideoPlayer {
                 }
 
                 if !is_playing && target_pts.is_none() {
-                    thread::sleep(std::time::Duration::from_millis(10));
+                    thread::sleep(std::time::Duration::from_millis(5));
                     continue;
                 }
 
@@ -168,7 +184,11 @@ impl VideoPlayer {
 
                 while let Some((stream, packet)) = packet_iter.next() {
                     // Check for new commands immediately
-                    if let Ok(cmd) = cmd_rx.try_recv() {
+                    let mut fast_cmd = cmd_rx.try_recv().ok();
+                    while let Ok(cmd) = cmd_rx.try_recv() {
+                        fast_cmd = Some(cmd);
+                    }
+                    if let Some(cmd) = fast_cmd {
                         match cmd {
                             PlayerCommand::Play => is_playing = true,
                             PlayerCommand::Pause => is_playing = false,
@@ -224,6 +244,7 @@ impl VideoPlayer {
                                         }
                                         target_pts = None;
                                         pushed_frame = true;
+                                        ctx.request_repaint();
 
                                         if !is_playing {
                                             break;
@@ -234,6 +255,7 @@ impl VideoPlayer {
                                         *lf = Some(frame);
                                     }
                                     pushed_frame = true;
+                                    ctx.request_repaint();
                                     break;
                                 }
                             }

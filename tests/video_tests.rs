@@ -1,7 +1,6 @@
 use std::process::Command;
 use track_overlay::video::VideoPlayer;
-use std::thread::sleep;
-use std::time::Duration;
+use eframe::egui;
 
 #[test]
 fn test_video_decode() {
@@ -16,10 +15,12 @@ fn test_video_decode() {
 
     assert!(status.success());
 
-    let mut player = VideoPlayer::new(test_vid_path).unwrap();
+    // Creating a mock context for the test
+    let ctx = egui::Context::default();
+    let mut player = VideoPlayer::new(test_vid_path, ctx).unwrap();
 
     let _ = player.play();
-    sleep(Duration::from_millis(1500)); // give bg thread time to decode
+    std::thread::sleep(std::time::Duration::from_millis(1500)); // give bg thread time to decode
 
     let sample = player.get_frame();
     assert!(sample.is_some(), "Should have decoded a frame");
