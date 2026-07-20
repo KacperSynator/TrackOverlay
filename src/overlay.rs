@@ -39,7 +39,7 @@ pub fn render_overlay(
                 painter.circle_stroke(
                     center,
                     radius,
-                    egui::Stroke::new(2.0, egui::Color32::WHITE),
+                    egui::Stroke::new(2.0 * el.scale, egui::Color32::WHITE),
                 );
 
                 let dot_pos = center + egui::vec2(lat_g * radius, -lon_g * radius);
@@ -82,7 +82,7 @@ pub fn render_overlay(
                         ));
                     }
 
-                    // Draw start/finish
+                    // Draw start/finish line and dot
                     let (p1, p2) = map.start_finish;
                     if p1 != (0.0, 0.0) || p2 != (0.0, 0.0) {
                         let sp1 = egui::pos2(
@@ -94,9 +94,13 @@ pub fn render_overlay(
                             map_rect.top() + p2.1 * map_rect.height()
                         );
                         painter.line_segment([sp1, sp2], egui::Stroke::new(3.0 * el.scale, egui::Color32::GREEN));
+
+                        // Draw a small bright green dot perfectly centered on the line for clarity
+                        let mid_p = egui::pos2( (sp1.x + sp2.x) / 2.0, (sp1.y + sp2.y) / 2.0 );
+                        painter.circle_filled(mid_p, 3.0 * el.scale, egui::Color32::GREEN);
                     }
 
-                    // Draw car dot
+                    // Draw car live position dot
                     if let Some(s) = sample {
                         let (cx, cy) = map.project(s.lat, s.lon);
                         let dot_pos = egui::pos2(

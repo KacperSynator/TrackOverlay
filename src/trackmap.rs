@@ -48,9 +48,6 @@ impl TrackMap {
 
         for s in &log.samples {
             let x = ((s.lon - lon_ref).to_radians() * lat_ref_rad.cos() * EARTH_RADIUS_M) as f32;
-            // Negative to account for typical map coordinates (north is up, which means higher latitude is lower Y in screen space if not flipped,
-            // but standard math: let's keep north = +y for math, then flip in render if needed.
-            // Actually, wait, standard screen is +y down. We'll map standard Cartesian: +y is North.
             let y = ((s.lat - lat_ref).to_radians() * EARTH_RADIUS_M) as f32;
 
             if x < min_x { min_x = x; }
@@ -79,9 +76,8 @@ impl TrackMap {
             outline.push((nx, 1.0 - ny)); // Invert Y so North is Up on screen
         }
 
-        // Determine Start/Finish Line
+        // Determine Start/Finish Line using normalized coords
         let sf_line = if let Some(&(_lap_num, start_time)) = lap_boundaries_ms.first() {
-            // Find direction at start
             if let Some(idx) = log.samples.iter().position(|s| s.time_ms >= start_time) {
                 if idx > 0 && idx + 1 < outline.len() {
                     let p1 = outline[idx - 1];
@@ -92,7 +88,6 @@ impl TrackMap {
                     let len = (dx * dx + dy * dy).sqrt();
 
                     if len > 0.0 {
-                        // Perpendicular vector
                         let px = -dy / len;
                         let py = dx / len;
 

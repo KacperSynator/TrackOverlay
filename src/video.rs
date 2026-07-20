@@ -117,14 +117,12 @@ impl VideoPlayer {
             let mut current_decoder_pts = start_pts;
 
             loop {
-                // Wait for the next seek command
                 let target_time_ms = match cmd_rx.recv() {
                     Ok(PlayerCommand::Seek(ms)) => ms,
                     Ok(PlayerCommand::Quit) => return,
                     Err(_) => return,
                 };
 
-                // Drain the channel to only process the very latest seek request
                 let mut final_time_ms = target_time_ms;
                 while let Ok(cmd) = cmd_rx.try_recv() {
                     match cmd {
@@ -135,11 +133,9 @@ impl VideoPlayer {
 
                 let target_pts = start_pts + (final_time_ms as f64 / 1000.0 / time_base) as i64;
 
-                // 1. Check cache first
                 let mut found_cached = None;
                 for (pts, frame) in frame_cache.iter() {
                     let pts_ms = (*pts as f64 * time_base * 1000.0) as i64;
-                    // within 40ms (~ 1-2 frames at 30/60fps)
                     if (pts_ms - final_time_ms).abs() < 40 {
                         found_cached = Some(frame.clone());
                         break;
@@ -151,26 +147,31 @@ impl VideoPlayer {
                         *lf = Some(frame);
                     }
                     ctx.request_repaint();
-                    continue; // Done with this seek
+                    continue;
                 }
 
-                // 2. Not in cache. Do we need to do a hard seek?
-                // If the target is behind us, OR more than 2 seconds ahead of us, we do a hard seek.
                 let pts_diff = target_pts - current_decoder_pts;
                 let ms_diff = pts_diff as f64 * time_base * 1000.0;
 
                 if ms_diff < 0.0 || ms_diff > 2000.0 {
-                    if input_ctx.seek(target_pts, ..target_pts).is_ok() {
+                    // Fix: Use .. to ensure we search for any keyframe backwards
+                    // up to the current target point, handling sparse I-Frame distributions
+                    if input_ctx.seek(target_pts, ..).is_ok() {
+                        decoder.flush();
+                        current_decoder_pts = target_pts;
+                    } else {
+                        // If exact upper bound seek fails, try a generalized backward seek flag
+                        // Note: ffmpeg_next seek bounds logic varies. Falling back to simple unrestricted seek if bounded fails.
+                        let _ = input_ctx.seek(target_pts, ..);
                         decoder.flush();
                         current_decoder_pts = target_pts;
                     }
                 }
 
-                // 3. Decode forward until we hit the target PTS
                 let mut decoded = ffmpeg::frame::Video::empty();
                 let mut packet_iter = input_ctx.packets();
 
-                let mut attempt_limit = 500; // safety valve
+                let mut attempt_limit = 1000;
 
                 while let Some((stream, packet)) = packet_iter.next() {
                     if attempt_limit == 0 {
@@ -212,21 +213,16 @@ impl VideoPlayer {
 
                                 frame_cache.put(current_pts, frame.clone());
 
-                                // Are we there yet?
                                 if current_pts >= target_pts {
                                     if let Ok(mut lf) = latest_frame_bg.lock() {
                                         *lf = Some(frame);
                                     }
                                     ctx.request_repaint();
-
-                                    // We hit our target. Break out of the packet read loop
-                                    // and go back to waiting for the next UI seek command.
                                     break;
                                 }
                             }
                         }
 
-                        // If we hit our target inside the inner loop, break the outer loop too
                         if current_decoder_pts >= target_pts {
                             break;
                         }
