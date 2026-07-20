@@ -1,16 +1,28 @@
 use anyhow::{anyhow, Result};
 use std::path::Path;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use chrono::{DateTime, Utc};
 use ffmpeg_next as ffmpeg;
-use ffmpeg_next::format::context::Input;
-use ffmpeg_next::software::scaling;
 use log::warn;
+use crossbeam_channel::{unbounded, Sender};
+use lru::LruCache;
+use std::num::NonZeroUsize;
 
+#[derive(Clone)]
 pub struct DecodedFrame {
-    pub data: Vec<u8>,
+    pub data: Arc<Vec<u8>>,
     pub width: u32,
     pub height: u32,
+    pub pts_ms: i64,
+}
+
+enum PlayerCommand {
+    Play,
+    Pause,
+    Seek(i64),
+    Quit,
 }
 
 pub struct VideoPlayer {
@@ -19,24 +31,22 @@ pub struct VideoPlayer {
     width: u32,
     height: u32,
 
-    input_ctx: Input,
-    video_stream_index: usize,
-    decoder: ffmpeg::decoder::Video,
-    scaler: scaling::Context,
-    time_base: f64,
-    start_pts: i64,
-
-    // Track the target PTS when we seek, so we decode forward to the exact frame
-    target_pts: Option<i64>,
-    last_frame: Option<DecodedFrame>,
+    cmd_tx: Sender<PlayerCommand>,
+    latest_frame: Arc<Mutex<Option<DecodedFrame>>>,
 }
 
+impl Drop for VideoPlayer {
+    fn drop(&mut self) {
+        let _ = self.cmd_tx.send(PlayerCommand::Quit);
+    }
+}
+
+// Ensure the Context and Decoder are created *inside* the spawned thread to avoid Send issues
 impl VideoPlayer {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         ffmpeg::init()?;
-        let path_str = path.as_ref().to_string_lossy();
+        let path_str = path.as_ref().to_string_lossy().to_string();
 
-        // Extract creation time
         let mut creation_time_utc = None;
         if let Ok(output) = Command::new("ffprobe")
             .args(&[
@@ -56,7 +66,7 @@ impl VideoPlayer {
             }
         }
 
-        let input_ctx = ffmpeg::format::input(&path)?;
+        let input_ctx = ffmpeg::format::input(&path_str)?;
         let stream = input_ctx
             .streams()
             .best(ffmpeg::media::Type::Video)
@@ -74,141 +84,200 @@ impl VideoPlayer {
             None
         };
 
+        // We only extract width and height here, everything else is done inside the thread.
         let codec_ctx = ffmpeg::codec::context::Context::from_parameters(stream.parameters())?;
         let decoder = codec_ctx.decoder().video()?;
-
         let width = decoder.width();
         let height = decoder.height();
 
-        let scaler = scaling::Context::get(
-            decoder.format(),
-            width,
-            height,
-            ffmpeg::format::Pixel::RGBA,
-            width,
-            height,
-            scaling::flag::Flags::FAST_BILINEAR,
-        )?;
+        let latest_frame = Arc::new(Mutex::new(None));
+        let latest_frame_bg = latest_frame.clone();
+
+        let (cmd_tx, cmd_rx) = unbounded::<PlayerCommand>();
+
+        let path_for_thread = path_str.clone();
+
+        // Spawn background decoding thread
+        thread::spawn(move || {
+            // Setup local decoder and scaling context inside the thread
+            let mut input_ctx = ffmpeg::format::input(&path_for_thread).unwrap();
+            let stream = input_ctx.streams().best(ffmpeg::media::Type::Video).unwrap();
+            let codec_ctx = ffmpeg::codec::context::Context::from_parameters(stream.parameters()).unwrap();
+            let mut decoder = codec_ctx.decoder().video().unwrap();
+
+            let mut scaler = ffmpeg::software::scaling::Context::get(
+                decoder.format(),
+                width,
+                height,
+                ffmpeg::format::Pixel::RGBA,
+                width,
+                height,
+                ffmpeg::software::scaling::flag::Flags::FAST_BILINEAR,
+            ).unwrap();
+
+            let mut is_playing = false;
+            let mut target_pts: Option<i64> = Some(start_pts);
+
+            // Cache ~100 frames (~800MB at 1080p RGBA) to allow butter-smooth scrubbing nearby
+            let mut frame_cache: LruCache<i64, DecodedFrame> = LruCache::new(NonZeroUsize::new(100).unwrap());
+
+            loop {
+                // Check commands
+                while let Ok(cmd) = if is_playing { cmd_rx.try_recv().map_err(|_| crossbeam_channel::RecvError) } else { cmd_rx.recv() } {
+                    match cmd {
+                        PlayerCommand::Play => is_playing = true,
+                        PlayerCommand::Pause => is_playing = false,
+                        PlayerCommand::Seek(time_ms) => {
+                            let seek_pts = start_pts + (time_ms as f64 / 1000.0 / time_base) as i64;
+
+                            // Check cache first!
+                            let mut found_cached = None;
+                            for (pts, frame) in frame_cache.iter() {
+                                let pts_ms = (*pts as f64 * time_base * 1000.0) as i64;
+                                if (pts_ms - time_ms).abs() < 50 {
+                                    found_cached = Some(frame.clone());
+                                    break;
+                                }
+                            }
+
+                            if let Some(frame) = found_cached {
+                                if let Ok(mut lf) = latest_frame_bg.lock() {
+                                    *lf = Some(frame);
+                                }
+                                target_pts = Some(seek_pts); // we still want to decode forward if playing
+                            } else {
+                                // Real seek required
+                                target_pts = Some(seek_pts);
+                                if input_ctx.seek(seek_pts, ..seek_pts).is_ok() {
+                                    decoder.flush();
+                                }
+                            }
+                        }
+                        PlayerCommand::Quit => return,
+                    }
+                }
+
+                if !is_playing && target_pts.is_none() {
+                    thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
+                }
+
+                let mut decoded = ffmpeg::frame::Video::empty();
+                let mut packet_iter = input_ctx.packets();
+                let mut pushed_frame = false;
+
+                while let Some((stream, packet)) = packet_iter.next() {
+                    // Check for new commands immediately
+                    if let Ok(cmd) = cmd_rx.try_recv() {
+                        match cmd {
+                            PlayerCommand::Play => is_playing = true,
+                            PlayerCommand::Pause => is_playing = false,
+                            PlayerCommand::Seek(time_ms) => {
+                                let seek_pts = start_pts + (time_ms as f64 / 1000.0 / time_base) as i64;
+                                target_pts = Some(seek_pts);
+                                if input_ctx.seek(seek_pts, ..seek_pts).is_ok() {
+                                    decoder.flush();
+                                }
+                                break;
+                            }
+                            PlayerCommand::Quit => return,
+                        }
+                    }
+
+                    if stream.index() == video_stream_index {
+                        if let Err(e) = decoder.send_packet(&packet) {
+                            warn!("Decoder send_packet error: {}", e);
+                            continue;
+                        }
+
+                        while decoder.receive_frame(&mut decoded).is_ok() {
+                            let current_pts = decoded.pts().unwrap_or(0);
+
+                            let mut rgb_frame = ffmpeg::frame::Video::empty();
+                            if scaler.run(&decoded, &mut rgb_frame).is_ok() {
+                                let w = rgb_frame.width() as usize;
+                                let h = rgb_frame.height() as usize;
+                                let stride = rgb_frame.stride(0) as usize;
+
+                                let mut packed_data = Vec::with_capacity(w * h * 4);
+                                let raw_data = rgb_frame.data(0);
+
+                                for y in 0..h {
+                                    let row_start = y * stride;
+                                    let row_end = row_start + w * 4;
+                                    packed_data.extend_from_slice(&raw_data[row_start..row_end]);
+                                }
+
+                                let frame = DecodedFrame {
+                                    data: Arc::new(packed_data),
+                                    width: w as u32,
+                                    height: h as u32,
+                                    pts_ms: (current_pts as f64 * time_base * 1000.0) as i64,
+                                };
+
+                                frame_cache.put(current_pts, frame.clone());
+
+                                if let Some(target) = target_pts {
+                                    if current_pts >= target {
+                                        if let Ok(mut lf) = latest_frame_bg.lock() {
+                                            *lf = Some(frame);
+                                        }
+                                        target_pts = None;
+                                        pushed_frame = true;
+
+                                        if !is_playing {
+                                            break;
+                                        }
+                                    }
+                                } else if is_playing {
+                                    if let Ok(mut lf) = latest_frame_bg.lock() {
+                                        *lf = Some(frame);
+                                    }
+                                    pushed_frame = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if pushed_frame {
+                        break;
+                    }
+                }
+            }
+        });
 
         Ok(Self {
             creation_time_utc,
             duration_ms,
             width,
             height,
-            input_ctx,
-            video_stream_index,
-            decoder,
-            scaler,
-            time_base,
-            start_pts,
-            target_pts: None,
-            last_frame: None,
+            cmd_tx,
+            latest_frame,
         })
     }
 
-    pub fn play(&self) -> Result<()> { Ok(()) }
-    pub fn pause(&self) -> Result<()> { Ok(()) }
-
-    pub fn seek(&mut self, time_ms: i64) -> Result<()> {
-        // Many containers have a non-zero start_pts, so we must add it to the requested seek time
-        let target_pts = self.start_pts + (time_ms as f64 / 1000.0 / self.time_base) as i64;
-        self.target_pts = Some(target_pts);
-
-        // Seek to the nearest keyframe *before* the target
-        self.input_ctx.seek(target_pts, ..target_pts)?;
-        self.decoder.flush();
-
+    pub fn play(&self) -> Result<()> {
+        let _ = self.cmd_tx.send(PlayerCommand::Play);
         Ok(())
     }
 
-    pub fn get_frame(&mut self) -> Result<Option<&DecodedFrame>> {
-        let mut decoded = ffmpeg::frame::Video::empty();
-
-        // Target PTS to hit, if we're seeking
-        let target = self.target_pts.unwrap_or(-1);
-        let mut attempt_limit = 1000; // GoPros have dense tracks; don't time out easily
-
-        // Process any frames currently buffered inside the decoder first
-        while self.decoder.receive_frame(&mut decoded).is_ok() {
-            if let Some(pts) = decoded.pts() {
-                if target < 0 || pts >= target {
-                    self.target_pts = None;
-                    if let Ok(Some(frame)) = self.process_frame(&decoded) {
-                        self.last_frame = Some(frame);
-                    }
-                    return Ok(self.last_frame.as_ref());
-                }
-            }
-        }
-
-        // Read packets and push to decoder
-        let mut packet_iter = self.input_ctx.packets();
-        while let Some((stream, packet)) = packet_iter.next() {
-            if stream.index() == self.video_stream_index {
-                if attempt_limit == 0 {
-                    warn!("Seeking timed out looking for PTS >= {}. Yielding latest frame.", target);
-                    self.target_pts = None;
-                    return Ok(self.last_frame.as_ref());
-                }
-                attempt_limit -= 1;
-
-                self.decoder.send_packet(&packet)?;
-                while self.decoder.receive_frame(&mut decoded).is_ok() {
-                    if let Some(pts) = decoded.pts() {
-                        if target < 0 || pts >= target {
-                            self.target_pts = None;
-                            if let Ok(Some(frame)) = self.process_frame(&decoded) {
-                                self.last_frame = Some(frame);
-                            }
-                            return Ok(self.last_frame.as_ref());
-                        }
-                    } else {
-                        // If no PTS, just return the frame
-                        self.target_pts = None;
-                        if let Ok(Some(frame)) = self.process_frame(&decoded) {
-                            self.last_frame = Some(frame);
-                        }
-                        return Ok(self.last_frame.as_ref());
-                    }
-                }
-            }
-        }
-
-        // If we hit EOF or the loop ended, try flushing the decoder to see if any frames pop out
-        let _ = self.decoder.send_eof();
-        if self.decoder.receive_frame(&mut decoded).is_ok() {
-            self.target_pts = None;
-            if let Ok(Some(frame)) = self.process_frame(&decoded) {
-                self.last_frame = Some(frame);
-            }
-            return Ok(self.last_frame.as_ref());
-        }
-
-        Ok(self.last_frame.as_ref())
+    pub fn pause(&self) -> Result<()> {
+        let _ = self.cmd_tx.send(PlayerCommand::Pause);
+        Ok(())
     }
 
-    fn process_frame(&mut self, decoded: &ffmpeg::frame::Video) -> Result<Option<DecodedFrame>> {
-        let mut rgb_frame = ffmpeg::frame::Video::empty();
-        self.scaler.run(decoded, &mut rgb_frame)?;
+    pub fn seek(&mut self, time_ms: i64) -> Result<()> {
+        let _ = self.cmd_tx.send(PlayerCommand::Seek(time_ms));
+        Ok(())
+    }
 
-        let width = rgb_frame.width() as usize;
-        let height = rgb_frame.height() as usize;
-        let stride = rgb_frame.stride(0) as usize;
-
-        let mut packed_data = Vec::with_capacity(width * height * 4);
-        let raw_data = rgb_frame.data(0);
-
-        for y in 0..height {
-            let row_start = y * stride;
-            let row_end = row_start + width * 4;
-            packed_data.extend_from_slice(&raw_data[row_start..row_end]);
+    pub fn get_frame(&mut self) -> Option<DecodedFrame> {
+        if let Ok(lock) = self.latest_frame.lock() {
+            lock.clone()
+        } else {
+            None
         }
-
-        Ok(Some(DecodedFrame {
-            data: packed_data,
-            width: width as u32,
-            height: height as u32,
-        }))
     }
 
     pub fn duration_ms(&mut self) -> Option<i64> {

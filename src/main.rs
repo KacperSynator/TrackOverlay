@@ -345,7 +345,7 @@ impl MyApp {
                     self.last_seek_ms = self.playhead_ms;
                 }
 
-                if let Ok(Some(frame)) = player.get_frame() {
+                if let Some(frame) = player.get_frame() {
                     let w = frame.width as usize;
                     let h = frame.height as usize;
 

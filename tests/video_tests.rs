@@ -18,7 +18,10 @@ fn test_video_decode() {
 
     let mut player = VideoPlayer::new(test_vid_path).unwrap();
 
-    let sample = player.get_frame().unwrap();
+    let _ = player.play();
+    sleep(Duration::from_millis(1500)); // give bg thread time to decode
+
+    let sample = player.get_frame();
     assert!(sample.is_some(), "Should have decoded a frame");
 
     let frame = sample.unwrap();
