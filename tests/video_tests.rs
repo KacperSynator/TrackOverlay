@@ -19,7 +19,7 @@ fn test_video_decode() {
     let ctx = egui::Context::default();
     let mut player = VideoPlayer::new(test_vid_path, ctx).unwrap();
 
-    let _ = player.play();
+    let _ = player.seek(100);
     std::thread::sleep(std::time::Duration::from_millis(1500)); // give bg thread time to decode
 
     let sample = player.get_frame();

@@ -20,8 +20,6 @@ pub struct DecodedFrame {
 }
 
 enum PlayerCommand {
-    Play,
-    Pause,
     Seek(i64),
     Quit,
 }
@@ -115,103 +113,80 @@ impl VideoPlayer {
                 ffmpeg::software::scaling::flag::Flags::FAST_BILINEAR,
             ).unwrap();
 
-            let mut is_playing = false;
-            let mut target_pts: Option<i64> = Some(start_pts);
-
-            let mut frame_cache: LruCache<i64, DecodedFrame> = LruCache::new(NonZeroUsize::new(100).unwrap());
+            let mut frame_cache: LruCache<i64, DecodedFrame> = LruCache::new(NonZeroUsize::new(200).unwrap());
+            let mut current_decoder_pts = start_pts;
 
             loop {
-                let mut cmd_opt = if is_playing {
-                    cmd_rx.try_recv().ok()
-                } else {
-                    if target_pts.is_some() {
-                        cmd_rx.try_recv().ok()
-                    } else {
-                        cmd_rx.recv().ok()
-                    }
+                // Wait for the next seek command
+                let target_time_ms = match cmd_rx.recv() {
+                    Ok(PlayerCommand::Seek(ms)) => ms,
+                    Ok(PlayerCommand::Quit) => return,
+                    Err(_) => return,
                 };
 
-                // Drain any additional commands so we get the very latest seek
+                // Drain the channel to only process the very latest seek request
+                let mut final_time_ms = target_time_ms;
                 while let Ok(cmd) = cmd_rx.try_recv() {
-                    cmd_opt = Some(cmd);
-                }
-
-                if let Some(cmd) = cmd_opt {
                     match cmd {
-                        PlayerCommand::Play => is_playing = true,
-                        PlayerCommand::Pause => is_playing = false,
-                        PlayerCommand::Seek(time_ms) => {
-                            let seek_pts = start_pts + (time_ms as f64 / 1000.0 / time_base) as i64;
-
-                            let mut found_cached = None;
-                            for (pts, frame) in frame_cache.iter() {
-                                let pts_ms = (*pts as f64 * time_base * 1000.0) as i64;
-                                if (pts_ms - time_ms).abs() < 100 {
-                                    found_cached = Some(frame.clone());
-                                    break;
-                                }
-                            }
-
-                            if let Some(frame) = found_cached {
-                                if let Ok(mut lf) = latest_frame_bg.lock() {
-                                    *lf = Some(frame);
-                                }
-                                ctx.request_repaint();
-                                if is_playing {
-                                    target_pts = Some(seek_pts);
-                                } else {
-                                    target_pts = None;
-                                }
-                            } else {
-                                target_pts = Some(seek_pts);
-                                if input_ctx.seek(seek_pts, ..seek_pts).is_ok() {
-                                    decoder.flush();
-                                }
-                            }
-                        }
+                        PlayerCommand::Seek(ms) => final_time_ms = ms,
                         PlayerCommand::Quit => return,
                     }
                 }
 
-                if !is_playing && target_pts.is_none() {
-                    thread::sleep(std::time::Duration::from_millis(5));
-                    continue;
+                let target_pts = start_pts + (final_time_ms as f64 / 1000.0 / time_base) as i64;
+
+                // 1. Check cache first
+                let mut found_cached = None;
+                for (pts, frame) in frame_cache.iter() {
+                    let pts_ms = (*pts as f64 * time_base * 1000.0) as i64;
+                    // within 40ms (~ 1-2 frames at 30/60fps)
+                    if (pts_ms - final_time_ms).abs() < 40 {
+                        found_cached = Some(frame.clone());
+                        break;
+                    }
                 }
 
+                if let Some(frame) = found_cached {
+                    if let Ok(mut lf) = latest_frame_bg.lock() {
+                        *lf = Some(frame);
+                    }
+                    ctx.request_repaint();
+                    continue; // Done with this seek
+                }
+
+                // 2. Not in cache. Do we need to do a hard seek?
+                // If the target is behind us, OR more than 2 seconds ahead of us, we do a hard seek.
+                let pts_diff = target_pts - current_decoder_pts;
+                let ms_diff = pts_diff as f64 * time_base * 1000.0;
+
+                if ms_diff < 0.0 || ms_diff > 2000.0 {
+                    if input_ctx.seek(target_pts, ..target_pts).is_ok() {
+                        decoder.flush();
+                        current_decoder_pts = target_pts;
+                    }
+                }
+
+                // 3. Decode forward until we hit the target PTS
                 let mut decoded = ffmpeg::frame::Video::empty();
                 let mut packet_iter = input_ctx.packets();
-                let mut pushed_frame = false;
+
+                let mut attempt_limit = 500; // safety valve
 
                 while let Some((stream, packet)) = packet_iter.next() {
-                    // Check for new commands immediately
-                    let mut fast_cmd = cmd_rx.try_recv().ok();
-                    while let Ok(cmd) = cmd_rx.try_recv() {
-                        fast_cmd = Some(cmd);
+                    if attempt_limit == 0 {
+                        warn!("Timed out decoding forward to PTS {}", target_pts);
+                        break;
                     }
-                    if let Some(cmd) = fast_cmd {
-                        match cmd {
-                            PlayerCommand::Play => is_playing = true,
-                            PlayerCommand::Pause => is_playing = false,
-                            PlayerCommand::Seek(time_ms) => {
-                                let seek_pts = start_pts + (time_ms as f64 / 1000.0 / time_base) as i64;
-                                target_pts = Some(seek_pts);
-                                if input_ctx.seek(seek_pts, ..seek_pts).is_ok() {
-                                    decoder.flush();
-                                }
-                                break;
-                            }
-                            PlayerCommand::Quit => return,
-                        }
-                    }
+                    attempt_limit -= 1;
 
                     if stream.index() == video_stream_index {
-                        if let Err(e) = decoder.send_packet(&packet) {
-                            warn!("Decoder send_packet error: {}", e);
+                        if decoder.send_packet(&packet).is_err() {
                             continue;
                         }
 
                         while decoder.receive_frame(&mut decoded).is_ok() {
-                            let current_pts = decoded.pts().unwrap_or(0);
+                            let current_pts = decoded.pts().unwrap_or(current_decoder_pts);
+                            current_decoder_pts = current_pts;
 
                             let mut rgb_frame = ffmpeg::frame::Video::empty();
                             if scaler.run(&decoded, &mut rgb_frame).is_ok() {
@@ -237,33 +212,24 @@ impl VideoPlayer {
 
                                 frame_cache.put(current_pts, frame.clone());
 
-                                if let Some(target) = target_pts {
-                                    if current_pts >= target {
-                                        if let Ok(mut lf) = latest_frame_bg.lock() {
-                                            *lf = Some(frame);
-                                        }
-                                        target_pts = None;
-                                        pushed_frame = true;
-                                        ctx.request_repaint();
-
-                                        if !is_playing {
-                                            break;
-                                        }
-                                    }
-                                } else if is_playing {
+                                // Are we there yet?
+                                if current_pts >= target_pts {
                                     if let Ok(mut lf) = latest_frame_bg.lock() {
                                         *lf = Some(frame);
                                     }
-                                    pushed_frame = true;
                                     ctx.request_repaint();
+
+                                    // We hit our target. Break out of the packet read loop
+                                    // and go back to waiting for the next UI seek command.
                                     break;
                                 }
                             }
                         }
-                    }
 
-                    if pushed_frame {
-                        break;
+                        // If we hit our target inside the inner loop, break the outer loop too
+                        if current_decoder_pts >= target_pts {
+                            break;
+                        }
                     }
                 }
             }
@@ -277,16 +243,6 @@ impl VideoPlayer {
             cmd_tx,
             latest_frame,
         })
-    }
-
-    pub fn play(&self) -> Result<()> {
-        let _ = self.cmd_tx.send(PlayerCommand::Play);
-        Ok(())
-    }
-
-    pub fn pause(&self) -> Result<()> {
-        let _ = self.cmd_tx.send(PlayerCommand::Pause);
-        Ok(())
     }
 
     pub fn seek(&mut self, time_ms: i64) -> Result<()> {

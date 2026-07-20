@@ -282,8 +282,6 @@ impl MyApp {
                     self.last_seek_ms = -1;
 
                     if let Ok(mut player) = VideoPlayer::new(&path_buf, ctx.clone()) {
-                        let _ = player.play();
-                        let _ = player.pause();
                         if let Some(dur) = player.duration_ms() {
                             self.video_duration_ms = dur;
                         }
