@@ -42,6 +42,8 @@ pub struct ProjectConfig {
     pub elements: Vec<OverlayElement>,
     #[serde(default)]
     pub flip_vertical: bool,
+    #[serde(default)]
+    pub flip_horizontal: bool,
 }
 
 impl Default for ProjectConfig {
@@ -51,6 +53,7 @@ impl Default for ProjectConfig {
             telemetry_path: PathBuf::new(),
             sync: SyncState::default(),
             flip_vertical: false,
+            flip_horizontal: false,
             elements: vec![
                 OverlayElement {
                     kind: OverlayKind::SpeedReadout,

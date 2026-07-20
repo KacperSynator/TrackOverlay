@@ -24,9 +24,11 @@ pub struct VideoPlayer {
     decoder: ffmpeg::decoder::Video,
     scaler: scaling::Context,
     time_base: f64,
+    start_pts: i64,
 
     // Track the target PTS when we seek, so we decode forward to the exact frame
     target_pts: Option<i64>,
+    last_frame: Option<DecodedFrame>,
 }
 
 impl VideoPlayer {
@@ -34,6 +36,7 @@ impl VideoPlayer {
         ffmpeg::init()?;
         let path_str = path.as_ref().to_string_lossy();
 
+        // Extract creation time
         let mut creation_time_utc = None;
         if let Ok(output) = Command::new("ffprobe")
             .args(&[
@@ -62,6 +65,8 @@ impl VideoPlayer {
         let video_stream_index = stream.index();
         let tb = stream.time_base();
         let time_base = f64::from(tb.numerator()) / f64::from(tb.denominator());
+
+        let start_pts = stream.start_time().max(0);
 
         let duration_ms = if stream.duration() >= 0 {
             Some((stream.duration() as f64 * time_base * 1000.0) as i64)
@@ -95,7 +100,9 @@ impl VideoPlayer {
             decoder,
             scaler,
             time_base,
+            start_pts,
             target_pts: None,
+            last_frame: None,
         })
     }
 
@@ -103,7 +110,8 @@ impl VideoPlayer {
     pub fn pause(&self) -> Result<()> { Ok(()) }
 
     pub fn seek(&mut self, time_ms: i64) -> Result<()> {
-        let target_pts = (time_ms as f64 / 1000.0 / self.time_base) as i64;
+        // Many containers have a non-zero start_pts, so we must add it to the requested seek time
+        let target_pts = self.start_pts + (time_ms as f64 / 1000.0 / self.time_base) as i64;
         self.target_pts = Some(target_pts);
 
         // Seek to the nearest keyframe *before* the target
@@ -113,19 +121,22 @@ impl VideoPlayer {
         Ok(())
     }
 
-    pub fn get_frame(&mut self) -> Result<Option<DecodedFrame>> {
+    pub fn get_frame(&mut self) -> Result<Option<&DecodedFrame>> {
         let mut decoded = ffmpeg::frame::Video::empty();
 
         // Target PTS to hit, if we're seeking
         let target = self.target_pts.unwrap_or(-1);
-        let mut attempt_limit = 120; // prevent infinite loops if pts is broken
+        let mut attempt_limit = 1000; // GoPros have dense tracks; don't time out easily
 
         // Process any frames currently buffered inside the decoder first
         while self.decoder.receive_frame(&mut decoded).is_ok() {
             if let Some(pts) = decoded.pts() {
                 if target < 0 || pts >= target {
                     self.target_pts = None;
-                    return self.process_frame(&decoded);
+                    if let Ok(Some(frame)) = self.process_frame(&decoded) {
+                        self.last_frame = Some(frame);
+                    }
+                    return Ok(self.last_frame.as_ref());
                 }
             }
         }
@@ -133,24 +144,31 @@ impl VideoPlayer {
         // Read packets and push to decoder
         let mut packet_iter = self.input_ctx.packets();
         while let Some((stream, packet)) = packet_iter.next() {
-            if attempt_limit == 0 {
-                warn!("Seeking timed out looking for PTS >= {}", target);
-                break;
-            }
-            attempt_limit -= 1;
-
             if stream.index() == self.video_stream_index {
+                if attempt_limit == 0 {
+                    warn!("Seeking timed out looking for PTS >= {}. Yielding latest frame.", target);
+                    self.target_pts = None;
+                    return Ok(self.last_frame.as_ref());
+                }
+                attempt_limit -= 1;
+
                 self.decoder.send_packet(&packet)?;
                 while self.decoder.receive_frame(&mut decoded).is_ok() {
                     if let Some(pts) = decoded.pts() {
                         if target < 0 || pts >= target {
                             self.target_pts = None;
-                            return self.process_frame(&decoded);
+                            if let Ok(Some(frame)) = self.process_frame(&decoded) {
+                                self.last_frame = Some(frame);
+                            }
+                            return Ok(self.last_frame.as_ref());
                         }
                     } else {
                         // If no PTS, just return the frame
                         self.target_pts = None;
-                        return self.process_frame(&decoded);
+                        if let Ok(Some(frame)) = self.process_frame(&decoded) {
+                            self.last_frame = Some(frame);
+                        }
+                        return Ok(self.last_frame.as_ref());
                     }
                 }
             }
@@ -160,10 +178,13 @@ impl VideoPlayer {
         let _ = self.decoder.send_eof();
         if self.decoder.receive_frame(&mut decoded).is_ok() {
             self.target_pts = None;
-            return self.process_frame(&decoded);
+            if let Ok(Some(frame)) = self.process_frame(&decoded) {
+                self.last_frame = Some(frame);
+            }
+            return Ok(self.last_frame.as_ref());
         }
 
-        Ok(None)
+        Ok(self.last_frame.as_ref())
     }
 
     fn process_frame(&mut self, decoded: &ffmpeg::frame::Video) -> Result<Option<DecodedFrame>> {

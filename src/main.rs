@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use egui_file_dialog::FileDialog;
-use log::{info, error};
+use log::{info, error, warn};
 
 use track_overlay::project::{ProjectConfig, SyncMode};
 use track_overlay::telemetry::TelemetryLog;
@@ -136,38 +136,12 @@ impl MyApp {
         let seconds = total_seconds % 60;
         format!("{:02}:{:02}", minutes, seconds)
     }
-}
 
-impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.is_playing {
-            let dt = ctx.input(|i| i.stable_dt);
-            self.playhead_ms += (dt * 1000.0) as i64;
-            if self.playhead_ms > self.video_duration_ms {
-                self.playhead_ms = self.video_duration_ms;
-                self.is_playing = false;
-            }
-            ctx.request_repaint();
-        }
-
-        // Dummy CentralPanel because `eframe::App::update` is the root, and we don't have a `ui` argument directly in `update`.
-        // Wait, eframe App trait in 0.34 has `ui` method back? No wait. It is `ui(ui, frame)`. But we saw it error on `ui` missing.
-        // Wait, looking at the previous error:
-        // error[E0046]: not all trait items implemented, missing: `ui`
-        //   --> src/main.rs:149:1
-        // 149 | impl eframe::App for MyApp {
-        //     = help: implement the missing item: `fn ui(&mut self, _: &mut Ui, _: &mut eframe::Frame) { todo!() }`
-        //
-        // Oh! `eframe::App` literally demands `ui` to be implemented. Okay, so I will implement both `update` and `ui` but I can put my logic inside `update` and just use `ui` to draw something, or vice versa?
-        // Wait, eframe App has `update` as an optional method with a default implementation that calls `ui(ui)`. So we only need to implement `update` if we want context, or `ui` if we want `Ui`.
-        // Let's implement `update` and call a helper.
-        // Actually, if it complains about missing `ui`, it means `ui` is a required method. Let's just provide it.
-
+    fn build_ui(&mut self, ctx: &egui::Context) {
         egui::Window::new("Controls").show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("Project Files");
 
-                // --- VIDEO FILE PICKER ---
                 ui.horizontal(|ui| {
                     if ui.button("Load Video").clicked() {
                         self.dialog_mode = DialogMode::PickVideo;
@@ -184,7 +158,6 @@ impl eframe::App for MyApp {
 
                 ui.add_space(10.0);
 
-                // --- TELEMETRY FILE PICKER ---
                 ui.horizontal(|ui| {
                     if ui.button("Load Telemetry").clicked() {
                         self.dialog_mode = DialogMode::PickTelemetry;
@@ -218,6 +191,7 @@ impl eframe::App for MyApp {
                 ui.separator();
                 ui.heading("Settings");
                 ui.checkbox(&mut self.config.flip_vertical, "Flip Video Vertically");
+                ui.checkbox(&mut self.config.flip_horizontal, "Flip Video Horizontally");
 
                 ui.separator();
                 ui.heading("Sync");
@@ -353,20 +327,21 @@ impl eframe::App for MyApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Allocate space for the video player at the top and controls at the bottom
             let rect = ui.available_rect_before_wrap();
-            let mut video_rect = rect;
+            let mut available_video_area = rect;
 
             // Bottom controls height
             let controls_height = 40.0;
-            video_rect.set_bottom(rect.bottom() - controls_height);
+            available_video_area.set_bottom(rect.bottom() - controls_height);
 
-            ui.painter().rect_filled(video_rect, 0.0, egui::Color32::from_rgb(20, 20, 20));
+            ui.painter().rect_filled(available_video_area, 0.0, egui::Color32::from_rgb(20, 20, 20));
 
             // Fetch frame from video player
             if let Some(player) = &mut self.video_player {
                 if self.playhead_ms != self.last_seek_ms {
-                    let _ = player.seek(self.playhead_ms);
+                    if let Err(e) = player.seek(self.playhead_ms) {
+                        warn!("Seek error: {}", e);
+                    }
                     self.last_seek_ms = self.playhead_ms;
                 }
 
@@ -390,28 +365,42 @@ impl eframe::App for MyApp {
                 }
             }
 
+            // By default, assume 16:9
+            let mut aspect = 16.0 / 9.0;
+            if let Some(tex) = &self.video_texture {
+                aspect = tex.aspect_ratio();
+            }
+
+            let mut w = available_video_area.width();
+            let mut h = w / aspect;
+            if h > available_video_area.height() {
+                h = available_video_area.height();
+                w = h * aspect;
+            }
+
+            let center = available_video_area.center();
+            let draw_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
+
             // Draw the video texture if available
             if let Some(tex) = &self.video_texture {
-                let aspect = tex.aspect_ratio();
-                let mut w = video_rect.width();
-                let mut h = w / aspect;
-                if h > video_rect.height() {
-                    h = video_rect.height();
-                    w = h * aspect;
+                let mut min_pos = egui::pos2(0.0, 0.0);
+                let mut max_pos = egui::pos2(1.0, 1.0);
+
+                if self.config.flip_horizontal {
+                    let tmp = min_pos.x;
+                    min_pos.x = max_pos.x;
+                    max_pos.x = tmp;
                 }
-
-                let center = video_rect.center();
-                let draw_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
-
-                let mut uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
                 if self.config.flip_vertical {
-                    uv = egui::Rect::from_min_max(egui::pos2(0.0, 1.0), egui::pos2(1.0, 0.0));
+                    let tmp = min_pos.y;
+                    min_pos.y = max_pos.y;
+                    max_pos.y = tmp;
                 }
 
                 ui.painter().image(
                     tex.id(),
                     draw_rect,
-                    uv,
+                    egui::Rect::from_min_max(min_pos, max_pos),
                     egui::Color32::WHITE,
                 );
             }
@@ -420,12 +409,18 @@ impl eframe::App for MyApp {
                 log.sample_at(self.playhead_ms + self.config.sync.offset_ms)
             });
 
-            render_overlay(ui, video_rect, &mut self.config.elements, sample.as_ref(), false);
+            // Bind the telemetry overlay rendering entirely to the draw_rect of the video stream
+            render_overlay(ui, draw_rect, &mut self.config.elements, sample.as_ref(), false);
 
             let mut control_rect = rect;
             control_rect.set_top(rect.bottom() - controls_height);
 
-            ui.scope_builder(egui::UiBuilder::new().max_rect(control_rect), |ui| {
+            // Constrain controls to the same width as the video so it aligns nicely
+            let mut centered_controls = control_rect;
+            centered_controls.set_left(draw_rect.left());
+            centered_controls.set_right(draw_rect.right());
+
+            ui.scope_builder(egui::UiBuilder::new().max_rect(centered_controls), |ui| {
                 ui.horizontal(|ui| {
                     let btn_text = if self.is_playing { "⏸ Pause" } else { "▶ Play" };
                     if ui.button(btn_text).clicked() {
@@ -442,9 +437,22 @@ impl eframe::App for MyApp {
             });
         });
     }
+}
 
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // eframe expects this to be implemented, but we drive rendering via update().
-        let _ = ui;
+impl eframe::App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.is_playing {
+            let dt = ctx.input(|i| i.stable_dt);
+            self.playhead_ms += (dt * 1000.0) as i64;
+            if self.playhead_ms > self.video_duration_ms {
+                self.playhead_ms = self.video_duration_ms;
+                self.is_playing = false;
+            }
+            ctx.request_repaint();
+        }
+
+        self.build_ui(ctx);
     }
+
+    fn ui(&mut self, _ui: &mut egui::Ui, _frame: &mut eframe::Frame) {}
 }

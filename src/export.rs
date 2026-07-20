@@ -22,6 +22,10 @@ pub fn export_video(
         filtergraph = format!("vflip,{}", filtergraph);
     }
 
+    if config.flip_horizontal {
+        filtergraph = format!("hflip,{}", filtergraph);
+    }
+
     let status = Command::new("ffmpeg")
         .args(&[
             "-y",
