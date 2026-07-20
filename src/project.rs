@@ -40,6 +40,8 @@ pub struct ProjectConfig {
     pub telemetry_path: PathBuf,
     pub sync: SyncState,
     pub elements: Vec<OverlayElement>,
+    #[serde(default)]
+    pub flip_vertical: bool,
 }
 
 impl Default for ProjectConfig {
@@ -48,6 +50,7 @@ impl Default for ProjectConfig {
             video_path: PathBuf::new(),
             telemetry_path: PathBuf::new(),
             sync: SyncState::default(),
+            flip_vertical: false,
             elements: vec![
                 OverlayElement {
                     kind: OverlayKind::SpeedReadout,

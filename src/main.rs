@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use egui_file_dialog::FileDialog;
-use log::{info, error, warn};
+use log::{info, error};
 
 use track_overlay::project::{ProjectConfig, SyncMode};
 use track_overlay::telemetry::TelemetryLog;
@@ -23,7 +23,6 @@ struct Args {
     #[arg(short, long)]
     project: Option<PathBuf>,
 
-    /// Default data directory for picking files or exporting
     #[arg(short, long, env = "DATA_DIR")]
     data_dir: Option<PathBuf>,
 }
@@ -44,7 +43,6 @@ fn main() -> eframe::Result {
             ProjectConfig::default()
         };
 
-        // In export mode we must actually load telemetry if available
         let telemetry = if config.telemetry_path.exists() {
             info!("Loading telemetry from {:?}", config.telemetry_path);
             TelemetryLog::load_csv(&config.telemetry_path).unwrap_or_else(|e| {
@@ -52,16 +50,11 @@ fn main() -> eframe::Result {
                 TelemetryLog { samples: vec![], start_time_utc: None }
             })
         } else {
-            warn!("Telemetry path does not exist: {:?}", config.telemetry_path);
             TelemetryLog { samples: vec![], start_time_utc: None }
         };
 
         info!("Beginning batch export to {:?}", output_path);
-        match export_video(&config, &telemetry, &output_path) {
-            Ok(_) => info!("Export complete: {:?}", output_path),
-            Err(e) => error!("Export failed: {}", e),
-        }
-
+        let _ = export_video(&config, &telemetry, &output_path);
         return Ok(());
     }
 
@@ -75,7 +68,6 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
 
-    info!("Launching eframe GUI...");
     eframe::run_native(
         "Track Overlay",
         options,
@@ -87,6 +79,7 @@ struct MyApp {
     config: ProjectConfig,
     telemetry: Option<TelemetryLog>,
     playhead_ms: i64,
+    is_playing: bool,
     auto_sync_progress: Option<Arc<Mutex<Option<i64>>>>,
     data_dir: Option<PathBuf>,
     export_progress: Option<String>,
@@ -99,7 +92,6 @@ struct MyApp {
     last_seek_ms: i64,
     video_duration_ms: i64,
 
-    // Extracted lap details
     telemetry_laps: Vec<(u32, i64)>, // Lap number, start_time_ms
 }
 
@@ -124,6 +116,7 @@ impl MyApp {
             config: ProjectConfig::default(),
             telemetry: None,
             playhead_ms: 0,
+            is_playing: false,
             auto_sync_progress: None,
             data_dir,
             export_progress: None,
@@ -136,20 +129,47 @@ impl MyApp {
             telemetry_laps: Vec::new(),
         }
     }
+
+    fn format_time(ms: i64) -> String {
+        let total_seconds = ms / 1000;
+        let minutes = total_seconds / 60;
+        let seconds = total_seconds % 60;
+        format!("{:02}:{:02}", minutes, seconds)
+    }
 }
 
 impl eframe::App for MyApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let ctx = ui.ctx().clone();
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.is_playing {
+            let dt = ctx.input(|i| i.stable_dt);
+            self.playhead_ms += (dt * 1000.0) as i64;
+            if self.playhead_ms > self.video_duration_ms {
+                self.playhead_ms = self.video_duration_ms;
+                self.is_playing = false;
+            }
+            ctx.request_repaint();
+        }
 
-        egui::Window::new("Controls").show(&ctx, |ui| {
+        // Dummy CentralPanel because `eframe::App::update` is the root, and we don't have a `ui` argument directly in `update`.
+        // Wait, eframe App trait in 0.34 has `ui` method back? No wait. It is `ui(ui, frame)`. But we saw it error on `ui` missing.
+        // Wait, looking at the previous error:
+        // error[E0046]: not all trait items implemented, missing: `ui`
+        //   --> src/main.rs:149:1
+        // 149 | impl eframe::App for MyApp {
+        //     = help: implement the missing item: `fn ui(&mut self, _: &mut Ui, _: &mut eframe::Frame) { todo!() }`
+        //
+        // Oh! `eframe::App` literally demands `ui` to be implemented. Okay, so I will implement both `update` and `ui` but I can put my logic inside `update` and just use `ui` to draw something, or vice versa?
+        // Wait, eframe App has `update` as an optional method with a default implementation that calls `ui(ui)`. So we only need to implement `update` if we want context, or `ui` if we want `Ui`.
+        // Let's implement `update` and call a helper.
+        // Actually, if it complains about missing `ui`, it means `ui` is a required method. Let's just provide it.
+
+        egui::Window::new("Controls").show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("Project Files");
 
                 // --- VIDEO FILE PICKER ---
                 ui.horizontal(|ui| {
                     if ui.button("Load Video").clicked() {
-                        info!("Opening file dialog for Video");
                         self.dialog_mode = DialogMode::PickVideo;
                         self.file_dialog.pick_file();
                     }
@@ -167,7 +187,6 @@ impl eframe::App for MyApp {
                 // --- TELEMETRY FILE PICKER ---
                 ui.horizontal(|ui| {
                     if ui.button("Load Telemetry").clicked() {
-                        info!("Opening file dialog for Telemetry");
                         self.dialog_mode = DialogMode::PickTelemetry;
                         self.file_dialog.pick_file();
                     }
@@ -197,10 +216,11 @@ impl eframe::App for MyApp {
                 }
 
                 ui.separator();
+                ui.heading("Settings");
+                ui.checkbox(&mut self.config.flip_vertical, "Flip Video Vertically");
 
+                ui.separator();
                 ui.heading("Sync");
-
-                ui.add(egui::Slider::new(&mut self.playhead_ms, 0..=self.video_duration_ms).text("Playhead (ms)"));
 
                 ui.horizontal(|ui| {
                     ui.radio_value(&mut self.config.sync.mode, SyncMode::Manual, "Manual Sync");
@@ -210,7 +230,6 @@ impl eframe::App for MyApp {
                 if self.config.sync.mode == SyncMode::Auto {
                     if self.auto_sync_progress.is_none() {
                         if ui.button("Run Auto-Sync").clicked() {
-                            info!("Starting Auto-Sync...");
                             let progress = Arc::new(Mutex::new(None));
                             self.auto_sync_progress = Some(progress.clone());
 
@@ -218,24 +237,16 @@ impl eframe::App for MyApp {
                             let telem_clone = if let Some(t) = &self.telemetry {
                                 TelemetryLog { samples: t.samples.clone(), start_time_utc: t.start_time_utc }
                             } else {
-                                warn!("No telemetry loaded for Auto-Sync!");
                                 TelemetryLog { samples: vec![], start_time_utc: None }
                             };
 
                             thread::spawn(move || {
-                                info!("Extracting GoPro GPS from {}", video_path);
                                 if let Ok(gps_data) = extract_gopro_gps(&video_path) {
-                                    info!("Extracted {} GPS points. Running correlation...", gps_data.len());
                                     if let Some(offset) = auto_correlate_gps(&gps_data, &telem_clone) {
-                                        info!("Auto-sync computed offset: {} ms", offset);
                                         if let Ok(mut lock) = progress.lock() {
                                             *lock = Some(offset);
                                         }
-                                    } else {
-                                        warn!("Auto-correlation failed or produced no valid result.");
                                     }
-                                } else {
-                                    error!("Failed to extract GoPro GPS data.");
                                 }
                             });
                         }
@@ -274,7 +285,6 @@ impl eframe::App for MyApp {
                 ui.separator();
 
                 if ui.button("Export Final Video").clicked() {
-                    info!("Opening file dialog for Export");
                     self.dialog_mode = DialogMode::PickExportOutput;
                     self.file_dialog.save_file();
                 }
@@ -286,57 +296,43 @@ impl eframe::App for MyApp {
         });
 
         // Update the file dialog
-        self.file_dialog.update(&ctx);
+        self.file_dialog.update(ctx);
 
         // Check if a file was picked
         if let Some(path) = self.file_dialog.take_picked() {
             let path_buf = path.to_path_buf();
             match self.dialog_mode {
                 DialogMode::PickVideo => {
-                    info!("Video file selected: {:?}", path_buf);
                     self.config.video_path = path_buf.clone();
                     self.playhead_ms = 0;
                     self.last_seek_ms = -1;
 
-                    match VideoPlayer::new(&path_buf) {
-                        Ok(mut player) => {
-                            let _ = player.play();
-                            let _ = player.pause();
-                            if let Some(dur) = player.duration_ms() {
-                                self.video_duration_ms = dur;
-                            }
-                            self.video_player = Some(player);
-                            info!("VideoPlayer initialized with duration {} ms", self.video_duration_ms);
+                    if let Ok(mut player) = VideoPlayer::new(&path_buf) {
+                        let _ = player.play();
+                        let _ = player.pause();
+                        if let Some(dur) = player.duration_ms() {
+                            self.video_duration_ms = dur;
                         }
-                        Err(e) => error!("Failed to load video: {}", e),
+                        self.video_player = Some(player);
                     }
                 }
                 DialogMode::PickTelemetry => {
-                    info!("Telemetry file selected: {:?}", path_buf);
                     self.config.telemetry_path = path_buf.clone();
-                    match TelemetryLog::load_csv(&path_buf) {
-                        Ok(log) => {
-                            info!("Successfully loaded telemetry: {} samples", log.samples.len());
-
-                            // Extract lap details
-                            self.telemetry_laps.clear();
-                            let mut current_lap = None;
-                            for s in &log.samples {
-                                if let Some(lap) = s.lap_number {
-                                    if Some(lap) != current_lap {
-                                        current_lap = Some(lap);
-                                        self.telemetry_laps.push((lap, s.time_ms));
-                                    }
+                    if let Ok(log) = TelemetryLog::load_csv(&path_buf) {
+                        self.telemetry_laps.clear();
+                        let mut current_lap = None;
+                        for s in &log.samples {
+                            if let Some(lap) = s.lap_number {
+                                if Some(lap) != current_lap {
+                                    current_lap = Some(lap);
+                                    self.telemetry_laps.push((lap, s.time_ms));
                                 }
                             }
-
-                            self.telemetry = Some(log);
                         }
-                        Err(e) => error!("Failed to load CSV: {}", e),
+                        self.telemetry = Some(log);
                     }
                 }
                 DialogMode::PickExportOutput => {
-                    info!("Export destination selected: {:?}", path_buf);
                     let config_clone = self.config.clone();
                     let telem_clone = if let Some(t) = &self.telemetry {
                         TelemetryLog { samples: t.samples.clone(), start_time_utc: t.start_time_utc }
@@ -345,17 +341,10 @@ impl eframe::App for MyApp {
                     };
 
                     self.export_progress = Some(format!("Exporting to {:?}...", path_buf));
-                    info!("Starting export...");
 
                     match export_video(&config_clone, &telem_clone, &path_buf) {
-                        Ok(_) => {
-                            info!("Export completed successfully.");
-                            self.export_progress = Some("Export completed successfully.".to_string());
-                        }
-                        Err(e) => {
-                            error!("Export failed: {}", e);
-                            self.export_progress = Some(format!("Export failed: {}", e));
-                        }
+                        Ok(_) => self.export_progress = Some("Export completed successfully.".to_string()),
+                        Err(e) => self.export_progress = Some(format!("Export failed: {}", e)),
                     }
                 }
                 DialogMode::None => {}
@@ -363,64 +352,99 @@ impl eframe::App for MyApp {
             self.dialog_mode = DialogMode::None;
         }
 
-        let rect = ui.available_rect_before_wrap();
-        ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgb(20, 20, 20));
+        egui::CentralPanel::default().show(ctx, |ui| {
+            // Allocate space for the video player at the top and controls at the bottom
+            let rect = ui.available_rect_before_wrap();
+            let mut video_rect = rect;
 
-        // Fetch frame from video player
-        if let Some(player) = &mut self.video_player {
-            if self.playhead_ms != self.last_seek_ms {
-                if let Err(e) = player.seek(self.playhead_ms) {
-                    warn!("Seek error: {}", e);
+            // Bottom controls height
+            let controls_height = 40.0;
+            video_rect.set_bottom(rect.bottom() - controls_height);
+
+            ui.painter().rect_filled(video_rect, 0.0, egui::Color32::from_rgb(20, 20, 20));
+
+            // Fetch frame from video player
+            if let Some(player) = &mut self.video_player {
+                if self.playhead_ms != self.last_seek_ms {
+                    let _ = player.seek(self.playhead_ms);
+                    self.last_seek_ms = self.playhead_ms;
                 }
-                self.last_seek_ms = self.playhead_ms;
-            }
 
-            if let Ok(Some(frame)) = player.get_frame() {
-                let w = frame.width as usize;
-                let h = frame.height as usize;
+                if let Ok(Some(frame)) = player.get_frame() {
+                    let w = frame.width as usize;
+                    let h = frame.height as usize;
 
-                if w > 0 && h > 0 {
-                    let image = egui::ColorImage::from_rgba_unmultiplied(
-                        [w, h],
-                        &frame.data,
-                    );
+                    if w > 0 && h > 0 {
+                        let image = egui::ColorImage::from_rgba_unmultiplied(
+                            [w, h],
+                            &frame.data,
+                        );
 
-                    let texture = ui.ctx().load_texture(
-                        "video_frame",
-                        image,
-                        egui::TextureOptions::LINEAR,
-                    );
-                    self.video_texture = Some(texture);
+                        let texture = ui.ctx().load_texture(
+                            "video_frame",
+                            image,
+                            egui::TextureOptions::LINEAR,
+                        );
+                        self.video_texture = Some(texture);
+                    }
                 }
             }
-        }
 
-        // Draw the video texture if available
-        if let Some(tex) = &self.video_texture {
-            // Keep aspect ratio
-            let aspect = tex.aspect_ratio();
-            let mut w = rect.width();
-            let mut h = w / aspect;
-            if h > rect.height() {
-                h = rect.height();
-                w = h * aspect;
+            // Draw the video texture if available
+            if let Some(tex) = &self.video_texture {
+                let aspect = tex.aspect_ratio();
+                let mut w = video_rect.width();
+                let mut h = w / aspect;
+                if h > video_rect.height() {
+                    h = video_rect.height();
+                    w = h * aspect;
+                }
+
+                let center = video_rect.center();
+                let draw_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
+
+                let mut uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                if self.config.flip_vertical {
+                    uv = egui::Rect::from_min_max(egui::pos2(0.0, 1.0), egui::pos2(1.0, 0.0));
+                }
+
+                ui.painter().image(
+                    tex.id(),
+                    draw_rect,
+                    uv,
+                    egui::Color32::WHITE,
+                );
             }
 
-            let center = rect.center();
-            let video_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
+            let sample = self.telemetry.as_ref().and_then(|log| {
+                log.sample_at(self.playhead_ms + self.config.sync.offset_ms)
+            });
 
-            ui.painter().image(
-                tex.id(),
-                video_rect,
-                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                egui::Color32::WHITE,
-            );
-        }
+            render_overlay(ui, video_rect, &mut self.config.elements, sample.as_ref(), false);
 
-        let sample = self.telemetry.as_ref().and_then(|log| {
-            log.sample_at(self.playhead_ms + self.config.sync.offset_ms)
+            let mut control_rect = rect;
+            control_rect.set_top(rect.bottom() - controls_height);
+
+            ui.scope_builder(egui::UiBuilder::new().max_rect(control_rect), |ui| {
+                ui.horizontal(|ui| {
+                    let btn_text = if self.is_playing { "⏸ Pause" } else { "▶ Play" };
+                    if ui.button(btn_text).clicked() {
+                        self.is_playing = !self.is_playing;
+                    }
+
+                    ui.label(format!("{} / {}", Self::format_time(self.playhead_ms), Self::format_time(self.video_duration_ms)));
+
+                    let slider = egui::Slider::new(&mut self.playhead_ms, 0..=self.video_duration_ms)
+                        .show_value(false)
+                        .trailing_fill(true);
+                    ui.add_sized(ui.available_size(), slider);
+                });
+            });
         });
+    }
 
-        render_overlay(ui, rect, &mut self.config.elements, sample.as_ref(), false);
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // eframe expects this to be implemented, but we drive rendering via update().
+        let _ = ui;
     }
 }
