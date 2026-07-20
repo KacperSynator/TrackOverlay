@@ -22,6 +22,11 @@ pub struct RawTelemetryRow {
     pub accel_y: f32,
     #[serde(rename = "Accel Z")]
     pub accel_z: f32,
+
+    // Add Throttle mapping. We use an Option because it might not be in all files,
+    // or we can use serde(default) if we want to fallback to 0.0
+    #[serde(rename = "Throttle Position (%) *OBD", default)]
+    pub throttle_position: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,6 +39,7 @@ pub struct TelemetrySample {
     pub accel_lon_g: f32,
     pub lap_number: Option<u32>,
     pub lap_time_ms: Option<i64>,
+    pub throttle_pct: f32,
 }
 
 #[derive(Clone)]
@@ -82,10 +88,26 @@ impl TelemetryLog {
                 accel_lon_g: row.accel_y, // Mapping y to lon
                 lap_number: Some(row.lap),
                 lap_time_ms: Some(lap_time_ms),
+                throttle_pct: row.throttle_position,
             });
         }
 
         Ok(Self { samples, start_time_utc })
+    }
+
+    /// Returns a list of (lap_number, start_time_ms) by scanning the samples
+    pub fn extract_laps(&self) -> Vec<(u32, i64)> {
+        let mut laps = Vec::new();
+        let mut current_lap = None;
+        for s in &self.samples {
+            if let Some(lap) = s.lap_number {
+                if Some(lap) != current_lap {
+                    current_lap = Some(lap);
+                    laps.push((lap, s.time_ms));
+                }
+            }
+        }
+        laps
     }
 
     pub fn sample_at(&self, t_ms: i64) -> Option<TelemetrySample> {
@@ -123,6 +145,7 @@ impl TelemetryLog {
                             let l2 = s2.lap_time_ms.unwrap_or(l1);
                             l1 + ((l2 - l1) as f32 * t) as i64
                         }),
+                        throttle_pct: s1.throttle_pct + (s2.throttle_pct - s1.throttle_pct) * t,
                     })
                 }
             }

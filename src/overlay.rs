@@ -1,17 +1,18 @@
 use eframe::egui;
 use crate::project::{OverlayElement, OverlayKind};
 use crate::telemetry::TelemetrySample;
+use crate::trackmap::TrackMap;
 
 pub fn render_overlay(
     ui: &mut egui::Ui,
     rect: egui::Rect,
     elements: &mut [OverlayElement],
     sample: Option<&TelemetrySample>,
+    trackmap: Option<&TrackMap>,
     _is_dragging: bool,
 ) {
     let painter = ui.painter_at(rect);
 
-    // Draw elements
     for el in elements.iter_mut() {
         let center = egui::pos2(
             rect.left() + el.x * rect.width(),
@@ -41,7 +42,6 @@ pub fn render_overlay(
                     egui::Stroke::new(2.0, egui::Color32::WHITE),
                 );
 
-                // Dot representing g-force
                 let dot_pos = center + egui::vec2(lat_g * radius, -lon_g * radius);
                 painter.circle_filled(dot_pos, 5.0 * el.scale, egui::Color32::RED);
             }
@@ -59,6 +59,69 @@ pub fn render_overlay(
                     egui::FontId::proportional(24.0 * el.scale),
                     egui::Color32::YELLOW,
                 );
+            }
+            OverlayKind::TrackMap => {
+                if let Some(map) = trackmap {
+                    // Draw map bounds based on element scale
+                    let map_size = 150.0 * el.scale;
+                    let map_rect = egui::Rect::from_center_size(center, egui::vec2(map_size, map_size));
+
+                    // Draw outline
+                    let mut path = Vec::with_capacity(map.outline.len());
+                    for &(x, y) in &map.outline {
+                        path.push(egui::pos2(
+                            map_rect.left() + x * map_rect.width(),
+                            map_rect.top() + y * map_rect.height()
+                        ));
+                    }
+
+                    if path.len() > 1 {
+                        painter.add(egui::Shape::line(
+                            path,
+                            egui::Stroke::new(2.0 * el.scale, egui::Color32::from_white_alpha(150)),
+                        ));
+                    }
+
+                    // Draw start/finish
+                    let (p1, p2) = map.start_finish;
+                    if p1 != (0.0, 0.0) || p2 != (0.0, 0.0) {
+                        let sp1 = egui::pos2(
+                            map_rect.left() + p1.0 * map_rect.width(),
+                            map_rect.top() + p1.1 * map_rect.height()
+                        );
+                        let sp2 = egui::pos2(
+                            map_rect.left() + p2.0 * map_rect.width(),
+                            map_rect.top() + p2.1 * map_rect.height()
+                        );
+                        painter.line_segment([sp1, sp2], egui::Stroke::new(3.0 * el.scale, egui::Color32::GREEN));
+                    }
+
+                    // Draw car dot
+                    if let Some(s) = sample {
+                        let (cx, cy) = map.project(s.lat, s.lon);
+                        let dot_pos = egui::pos2(
+                            map_rect.left() + cx * map_rect.width(),
+                            map_rect.top() + cy * map_rect.height()
+                        );
+                        painter.circle_filled(dot_pos, 4.0 * el.scale, egui::Color32::RED);
+                    }
+                }
+            }
+            OverlayKind::ThrottleBar => {
+                let throttle = sample.map_or(0.0, |s| s.throttle_pct).clamp(0.0, 100.0) / 100.0;
+
+                let width = 20.0 * el.scale;
+                let max_height = 100.0 * el.scale;
+
+                let bg_rect = egui::Rect::from_center_size(center, egui::vec2(width, max_height));
+                painter.rect_filled(bg_rect, 2.0, egui::Color32::from_black_alpha(150));
+                painter.rect_stroke(bg_rect, 2.0, egui::Stroke::new(1.0, egui::Color32::WHITE), egui::StrokeKind::Inside);
+
+                let fill_height = max_height * throttle;
+                let mut fill_rect = bg_rect;
+                fill_rect.set_top(bg_rect.bottom() - fill_height);
+
+                painter.rect_filled(fill_rect, 2.0, egui::Color32::GREEN);
             }
         }
     }

@@ -6,6 +6,8 @@ pub enum OverlayKind {
     SpeedReadout,
     GForceMeter,
     LapTimer,
+    TrackMap,
+    ThrottleBar,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +73,18 @@ impl Default for ProjectConfig {
                     kind: OverlayKind::LapTimer,
                     x: 0.8,
                     y: 0.1,
+                    scale: 1.0,
+                },
+                OverlayElement {
+                    kind: OverlayKind::TrackMap,
+                    x: 0.8,
+                    y: 0.8,
+                    scale: 1.0,
+                },
+                OverlayElement {
+                    kind: OverlayKind::ThrottleBar,
+                    x: 0.3,
+                    y: 0.8,
                     scale: 1.0,
                 },
             ],

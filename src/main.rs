@@ -13,6 +13,7 @@ use track_overlay::export::export_video;
 use track_overlay::gpmf_extract::extract_gopro_gps;
 use track_overlay::sync::auto_correlate_gps;
 use track_overlay::video::VideoPlayer;
+use track_overlay::trackmap::TrackMap;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -78,6 +79,7 @@ fn main() -> eframe::Result {
 struct MyApp {
     config: ProjectConfig,
     telemetry: Option<TelemetryLog>,
+    trackmap: Option<TrackMap>,
     playhead_ms: i64,
     is_playing: bool,
     auto_sync_progress: Option<Arc<Mutex<Option<i64>>>>,
@@ -115,6 +117,7 @@ impl MyApp {
         Self {
             config: ProjectConfig::default(),
             telemetry: None,
+            trackmap: None,
             playhead_ms: 0,
             is_playing: false,
             auto_sync_progress: None,
@@ -301,6 +304,8 @@ impl MyApp {
                                 }
                             }
                         }
+
+                        self.trackmap = TrackMap::from_telemetry(&log, &self.telemetry_laps);
                         self.telemetry = Some(log);
                     }
                 }
@@ -408,7 +413,7 @@ impl MyApp {
             });
 
             // Bind the telemetry overlay rendering entirely to the draw_rect of the video stream
-            render_overlay(ui, draw_rect, &mut self.config.elements, sample.as_ref(), false);
+            render_overlay(ui, draw_rect, &mut self.config.elements, sample.as_ref(), self.trackmap.as_ref(), false);
 
             let mut control_rect = rect;
             control_rect.set_top(rect.bottom() - controls_height);
@@ -452,5 +457,7 @@ impl eframe::App for MyApp {
         self.build_ui(ctx);
     }
 
-    fn ui(&mut self, _ui: &mut egui::Ui, _frame: &mut eframe::Frame) {}
+    fn ui(&mut self, _ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Not used, ui logic handled inside update() manually
+    }
 }
