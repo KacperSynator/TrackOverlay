@@ -6,6 +6,9 @@ pub struct TrackMap {
     /// Track outline points, already normalized to a 0.0..=1.0 square
     pub outline: Vec<(f32, f32)>,
 
+    /// The timestamps corresponding to each point in the outline
+    pub times_ms: Vec<i64>,
+
     /// Start/finish line as a short segment in the same normalized coordinate space.
     pub start_finish: ((f32, f32), (f32, f32)),
 
@@ -68,17 +71,20 @@ impl TrackMap {
 
         // Apply normalization
         let mut outline = Vec::with_capacity(projected.len());
-        for (x, y) in projected {
+        let mut times_ms = Vec::with_capacity(projected.len());
+
+        for (i, (x, y)) in projected.into_iter().enumerate() {
             // center the shorter axis
             let nx = (x + offset_x) * scale + if height > width { (1.0 - width * scale) / 2.0 } else { 0.0 };
             let ny = (y + offset_y) * scale + if width > height { (1.0 - height * scale) / 2.0 } else { 0.0 };
 
             outline.push((nx, 1.0 - ny)); // Invert Y so North is Up on screen
+            times_ms.push(log.samples[i].time_ms);
         }
 
         // Determine Start/Finish Line using normalized coords
         let sf_line = if let Some(&(_lap_num, start_time)) = lap_boundaries_ms.first() {
-            if let Some(idx) = log.samples.iter().position(|s| s.time_ms >= start_time) {
+            if let Some(idx) = times_ms.iter().position(|&t| t >= start_time) {
                 if idx > 0 && idx + 1 < outline.len() {
                     let p1 = outline[idx - 1];
                     let p2 = outline[idx + 1];
@@ -113,6 +119,7 @@ impl TrackMap {
 
         Some(Self {
             outline,
+            times_ms,
             start_finish: sf_line,
             lat_ref,
             lon_ref,
@@ -123,14 +130,33 @@ impl TrackMap {
         })
     }
 
-    pub fn project(&self, lat: f64, lon: f64) -> (f32, f32) {
-        let lat_ref_rad = self.lat_ref.to_radians();
-        let x = ((lon - self.lon_ref).to_radians() * lat_ref_rad.cos() * EARTH_RADIUS_M) as f32;
-        let y = ((lat - self.lat_ref).to_radians() * EARTH_RADIUS_M) as f32;
+    /// Instead of projecting a lat/lon directly, we calculate exactly where on the polyline
+    /// this specific time falls. This guarantees perfectly smooth dots that don't jitter off the line.
+    pub fn point_at_time(&self, time_ms: i64) -> Option<(f32, f32)> {
+        if self.times_ms.is_empty() { return None; }
 
-        let nx = (x + self.offset_x) * self.scale_x;
-        let ny = (y + self.offset_y) * self.scale_y;
+        match self.times_ms.binary_search(&time_ms) {
+            Ok(idx) => Some(self.outline[idx]),
+            Err(idx) => {
+                if idx == 0 {
+                    Some(self.outline[0])
+                } else if idx >= self.times_ms.len() {
+                    Some(*self.outline.last().unwrap())
+                } else {
+                    let t1 = self.times_ms[idx - 1];
+                    let t2 = self.times_ms[idx];
+                    let p1 = self.outline[idx - 1];
+                    let p2 = self.outline[idx];
 
-        (nx, 1.0 - ny)
+                    let dt = (t2 - t1) as f32;
+                    let t = if dt > 0.0 { (time_ms - t1) as f32 / dt } else { 0.0 };
+
+                    Some((
+                        p1.0 + (p2.0 - p1.0) * t,
+                        p1.1 + (p2.1 - p1.1) * t
+                    ))
+                }
+            }
+        }
     }
 }

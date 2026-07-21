@@ -31,15 +31,15 @@ fn test_trackmap_projection() {
 
     // We need at least 10 samples to bypass the early exit safeguard
     let mut log_padded = log.clone();
-    for i in 0..10 {
+    for _i in 0..10 {
         log_padded.samples.push(log.samples[0].clone());
     }
 
     let track = TrackMap::from_telemetry(&log_padded, &laps).unwrap();
 
-    // Test projection bounding properties
-    let p0 = track.project(0.0, 0.0);
-    let p1 = track.project(1.0, 1.0);
+    // Test that the interpolated points lie within the bounding box
+    let p0 = track.point_at_time(0).unwrap();
+    let p1 = track.point_at_time(2000).unwrap();
 
     assert!(p0.0 >= 0.0 && p0.0 <= 1.0);
     assert!(p0.1 >= 0.0 && p0.1 <= 1.0);

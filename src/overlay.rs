@@ -95,19 +95,19 @@ pub fn render_overlay(
                         );
                         painter.line_segment([sp1, sp2], egui::Stroke::new(3.0 * el.scale, egui::Color32::GREEN));
 
-                        // Draw a small bright green dot perfectly centered on the line for clarity
                         let mid_p = egui::pos2( (sp1.x + sp2.x) / 2.0, (sp1.y + sp2.y) / 2.0 );
                         painter.circle_filled(mid_p, 3.0 * el.scale, egui::Color32::GREEN);
                     }
 
-                    // Draw car live position dot
+                    // Draw car live position dot based on interpolated time
                     if let Some(s) = sample {
-                        let (cx, cy) = map.project(s.lat, s.lon);
-                        let dot_pos = egui::pos2(
-                            map_rect.left() + cx * map_rect.width(),
-                            map_rect.top() + cy * map_rect.height()
-                        );
-                        painter.circle_filled(dot_pos, 4.0 * el.scale, egui::Color32::RED);
+                        if let Some((cx, cy)) = map.point_at_time(s.time_ms) {
+                            let dot_pos = egui::pos2(
+                                map_rect.left() + cx * map_rect.width(),
+                                map_rect.top() + cy * map_rect.height()
+                            );
+                            painter.circle_filled(dot_pos, 4.0 * el.scale, egui::Color32::RED);
+                        }
                     }
                 }
             }
