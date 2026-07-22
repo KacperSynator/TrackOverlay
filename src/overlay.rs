@@ -62,7 +62,6 @@ pub fn render_overlay(
             }
             OverlayKind::TrackMap => {
                 if let Some(map) = trackmap {
-                    // Draw map bounds based on element scale
                     let map_size = 150.0 * el.scale;
                     let map_rect = egui::Rect::from_center_size(center, egui::vec2(map_size, map_size));
 
@@ -82,7 +81,7 @@ pub fn render_overlay(
                         ));
                     }
 
-                    // Draw start/finish line and dot
+                    // Draw start/finish line and dot explicitly
                     let (p1, p2) = map.start_finish;
                     if p1 != (0.0, 0.0) || p2 != (0.0, 0.0) {
                         let sp1 = egui::pos2(
@@ -99,7 +98,7 @@ pub fn render_overlay(
                         painter.circle_filled(mid_p, 3.0 * el.scale, egui::Color32::GREEN);
                     }
 
-                    // Draw car live position dot based on interpolated time
+                    // Draw car live position dot based on interpolated time (the smoothed path)
                     if let Some(s) = sample {
                         if let Some((cx, cy)) = map.point_at_time(s.time_ms) {
                             let dot_pos = egui::pos2(

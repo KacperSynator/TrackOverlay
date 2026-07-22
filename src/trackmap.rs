@@ -56,7 +56,12 @@ impl TrackMap {
         // Normalization (maintain aspect ratio)
         let width = max_x - min_x;
         let height = max_y - min_y;
-        let scale = if width > height { 1.0 / width } else { 1.0 / height };
+        // Avoid division by zero on degenerate tracks
+        let scale = if width > 0.0 && height > 0.0 {
+            if width > height { 1.0 / width } else { 1.0 / height }
+        } else {
+            1.0
+        };
 
         let offset_x = -min_x;
         let offset_y = -min_y;
@@ -74,31 +79,30 @@ impl TrackMap {
             times_ms.push(log.samples[i].time_ms);
         }
 
-        // Determine Start/Finish Line using normalized coords
+        // Determine Start/Finish Line using the fully NORMALIZED coords so it draws correctly
         let sf_line = if let Some(&(_lap_num, start_time)) = lap_boundaries_ms.first() {
             if let Some(idx) = times_ms.iter().position(|&t| t >= start_time) {
-                if idx > 0 && idx + 1 < outline.len() {
-                    let p1 = outline[idx - 1];
-                    let p2 = outline[idx + 1];
+                // Find adjacent points to compute vector
+                let p1 = if idx > 0 { outline[idx - 1] } else { outline[idx] };
+                let p2 = if idx + 1 < outline.len() { outline[idx + 1] } else { outline[idx] };
 
-                    let dx = p2.0 - p1.0;
-                    let dy = p2.1 - p1.1;
-                    let len = (dx * dx + dy * dy).sqrt();
+                let dx = p2.0 - p1.0;
+                let dy = p2.1 - p1.1;
+                let len = (dx * dx + dy * dy).sqrt();
 
-                    if len > 0.0 {
-                        let px = -dy / len;
-                        let py = dx / len;
+                if len > 0.0 {
+                    // Perpendicular vector normalized
+                    let px = -dy / len;
+                    let py = dx / len;
 
-                        let width_fraction = 0.05; // 5% of bounding box
-                        let p = outline[idx];
+                    // The line extends 5% of the bounding box width on either side of the track
+                    let width_fraction = 0.05;
+                    let p = outline[idx];
 
-                        (
-                            (p.0 - px * width_fraction, p.1 - py * width_fraction),
-                            (p.0 + px * width_fraction, p.1 + py * width_fraction)
-                        )
-                    } else {
-                        ((0.0, 0.0), (0.0, 0.0))
-                    }
+                    (
+                        (p.0 - px * width_fraction, p.1 - py * width_fraction),
+                        (p.0 + px * width_fraction, p.1 + py * width_fraction)
+                    )
                 } else {
                     ((0.0, 0.0), (0.0, 0.0))
                 }
@@ -116,8 +120,7 @@ impl TrackMap {
         })
     }
 
-    /// Calculates exactly where on the polyline this specific time falls.
-    /// This guarantees perfectly smooth dots that don't jitter off the line.
+    /// Interpolates smoothly along the physical drawn lines to ensure the dot never jitters off-track.
     pub fn point_at_time(&self, time_ms: i64) -> Option<(f32, f32)> {
         if self.times_ms.is_empty() { return None; }
 
