@@ -11,14 +11,6 @@ pub struct TrackMap {
 
     /// Start/finish line as a short segment in the same normalized coordinate space.
     pub start_finish: ((f32, f32), (f32, f32)),
-
-    // Internal projection state
-    lat_ref: f64,
-    lon_ref: f64,
-    scale_x: f32,
-    scale_y: f32,
-    offset_x: f32,
-    offset_y: f32,
 }
 
 const EARTH_RADIUS_M: f64 = 6371000.0;
@@ -121,17 +113,11 @@ impl TrackMap {
             outline,
             times_ms,
             start_finish: sf_line,
-            lat_ref,
-            lon_ref,
-            scale_x: scale,
-            scale_y: scale,
-            offset_x: offset_x + if height > width { (1.0 / scale - width) / 2.0 } else { 0.0 },
-            offset_y: offset_y + if width > height { (1.0 / scale - height) / 2.0 } else { 0.0 },
         })
     }
 
-    /// Instead of projecting a lat/lon directly, we calculate exactly where on the polyline
-    /// this specific time falls. This guarantees perfectly smooth dots that don't jitter off the line.
+    /// Calculates exactly where on the polyline this specific time falls.
+    /// This guarantees perfectly smooth dots that don't jitter off the line.
     pub fn point_at_time(&self, time_ms: i64) -> Option<(f32, f32)> {
         if self.times_ms.is_empty() { return None; }
 
