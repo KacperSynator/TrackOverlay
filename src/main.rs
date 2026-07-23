@@ -88,7 +88,6 @@ struct MyApp {
     playhead_ms: i64,
     is_playing: bool,
     auto_sync_progress: Option<Arc<Mutex<Option<i64>>>>,
-    #[allow(dead_code)]
     data_dir: Option<PathBuf>,
     export_progress: Option<String>,
     active_export_progress: Option<Arc<Mutex<track_overlay::export::ExportProgress>>>,
@@ -266,22 +265,24 @@ impl MyApp {
                             };
 
                             thread::spawn(move || {
-                                if let Ok(gps_data) = extract_gopro_gps(&video_path)
-                                    && let Some(offset) =
+                                if let Ok(gps_data) = extract_gopro_gps(&video_path) {
+                                    if let Some(offset) =
                                         auto_correlate_gps(&gps_data, &telem_clone)
-                                    && let Ok(mut lock) = progress.lock()
-                                {
-                                    *lock = Some(offset);
+                                    {
+                                        if let Ok(mut lock) = progress.lock() {
+                                            *lock = Some(offset);
+                                        }
+                                    }
                                 }
                             });
                         }
                     } else {
                         let mut done = false;
-                        if let Ok(lock) = self.auto_sync_progress.as_ref().unwrap().lock()
-                            && let Some(offset) = *lock
-                        {
-                            self.config.sync.offset_ms = offset;
-                            done = true;
+                        if let Ok(lock) = self.auto_sync_progress.as_ref().unwrap().lock() {
+                            if let Some(offset) = *lock {
+                                self.config.sync.offset_ms = offset;
+                                done = true;
+                            }
                         }
                         if done {
                             self.auto_sync_progress = None;
@@ -304,7 +305,7 @@ impl MyApp {
 
                 ui.separator();
                 ui.label("Layout Editor");
-                for el in self.config.elements.iter_mut() {
+                for (_i, el) in self.config.elements.iter_mut().enumerate() {
                     ui.horizontal(|ui| {
                         ui.label(format!("{:?}", el.kind));
                         ui.add(egui::Slider::new(&mut el.x, 0.0..=1.0).text("X"));
@@ -351,11 +352,11 @@ impl MyApp {
                         self.telemetry_laps.clear();
                         let mut current_lap = None;
                         for s in &log.samples {
-                            if let Some(lap) = s.lap_number
-                                && Some(lap) != current_lap
-                            {
-                                current_lap = Some(lap);
-                                self.telemetry_laps.push((lap, s.time_ms));
+                            if let Some(lap) = s.lap_number {
+                                if Some(lap) != current_lap {
+                                    current_lap = Some(lap);
+                                    self.telemetry_laps.push((lap, s.time_ms));
+                                }
                             }
                         }
 
@@ -400,7 +401,6 @@ impl MyApp {
             self.dialog_mode = DialogMode::None;
         }
 
-        #[allow(deprecated)]
         egui::CentralPanel::default().show(ctx, |ui| {
             let rect = ui.available_rect_before_wrap();
             let mut available_video_area = rect;
@@ -463,10 +463,14 @@ impl MyApp {
                 let mut max_pos = egui::pos2(1.0, 1.0);
 
                 if self.config.flip_horizontal {
-                    std::mem::swap(&mut min_pos.x, &mut max_pos.x);
+                    let tmp = min_pos.x;
+                    min_pos.x = max_pos.x;
+                    max_pos.x = tmp;
                 }
                 if self.config.flip_vertical {
-                    std::mem::swap(&mut min_pos.y, &mut max_pos.y);
+                    let tmp = min_pos.y;
+                    min_pos.y = max_pos.y;
+                    max_pos.y = tmp;
                 }
 
                 ui.painter().image(
@@ -525,9 +529,7 @@ impl MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let ctx = ui.ctx().clone();
-
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Ok(res) = self.export_rx.try_recv() {
             self.active_export_progress = None;
             match res {
@@ -552,6 +554,10 @@ impl eframe::App for MyApp {
             ctx.request_repaint();
         }
 
-        self.build_ui(&ctx);
+        self.build_ui(ctx);
+    }
+
+    fn ui(&mut self, _ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Not used, ui logic handled inside update() manually
     }
 }

@@ -3,6 +3,7 @@ use track_overlay::trackmap::TrackMap;
 
 #[test]
 fn test_trackmap_projection() {
+    let mut samples = Vec::new();
     // Square around equator (0,0)
     samples.push(TelemetrySample {
         time_ms: 0,

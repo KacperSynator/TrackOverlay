@@ -3,7 +3,7 @@ use crate::telemetry::TelemetrySample;
 use crate::trackmap::TrackMap;
 use eframe::egui;
 use rusttype::{Font, Scale};
-use tiny_skia::{Color, Paint, PathBuilder, PixmapMut, Rect, Transform};
+use tiny_skia::{Color, Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 pub struct OverlayData<'a> {
     pub sample: Option<&'a TelemetrySample>,
@@ -123,14 +123,14 @@ pub fn render_overlay(
                         painter.circle_filled(mid_p, 3.0 * el.scale, egui::Color32::GREEN);
                     }
 
-                    if let Some(s) = sample
-                        && let Some((cx, cy)) = map.point_at_time(s.time_ms)
-                    {
-                        let dot_pos = egui::pos2(
-                            map_rect.left() + cx * map_rect.width(),
-                            map_rect.top() + cy * map_rect.height(),
-                        );
-                        painter.circle_filled(dot_pos, 4.0 * el.scale, egui::Color32::RED);
+                    if let Some(s) = sample {
+                        if let Some((cx, cy)) = map.point_at_time(s.time_ms) {
+                            let dot_pos = egui::pos2(
+                                map_rect.left() + cx * map_rect.width(),
+                                map_rect.top() + cy * map_rect.height(),
+                            );
+                            painter.circle_filled(dot_pos, 4.0 * el.scale, egui::Color32::RED);
+                        }
                     }
                 }
             }
@@ -207,10 +207,8 @@ pub fn render_overlay_skia(
                 paint.set_color_rgba8(255, 255, 255, 255);
                 paint.anti_alias = true;
 
-                let stroke = tiny_skia::Stroke {
-                    width: 2.0 * el.scale,
-                    ..Default::default()
-                };
+                let mut stroke = Stroke::default();
+                stroke.width = 2.0 * el.scale;
 
                 if let Some(path) = PathBuilder::from_circle(center_x, center_y, radius) {
                     pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
@@ -281,10 +279,8 @@ pub fn render_overlay_skia(
                         paint.set_color_rgba8(255, 255, 255, 150);
                         paint.anti_alias = true;
 
-                        let stroke = tiny_skia::Stroke {
-                            width: 2.0 * el.scale,
-                            ..Default::default()
-                        };
+                        let mut stroke = Stroke::default();
+                        stroke.width = 2.0 * el.scale;
 
                         pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
                     }
@@ -304,10 +300,8 @@ pub fn render_overlay_skia(
                             let mut paint = Paint::default();
                             paint.set_color_rgba8(0, 255, 0, 255);
                             paint.anti_alias = true;
-                            let stroke = tiny_skia::Stroke {
-                                width: 3.0 * el.scale,
-                                ..Default::default()
-                            };
+                            let mut stroke = Stroke::default();
+                            stroke.width = 3.0 * el.scale;
                             pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
                         }
 
@@ -328,24 +322,26 @@ pub fn render_overlay_skia(
                         }
                     }
 
-                    if let Some(s) = sample
-                        && let Some((cx, cy)) = map.point_at_time(s.time_ms)
-                    {
-                        let dot_x = left + cx * map_size;
-                        let dot_y = top + cy * map_size;
+                    if let Some(s) = sample {
+                        if let Some((cx, cy)) = map.point_at_time(s.time_ms) {
+                            let dot_x = left + cx * map_size;
+                            let dot_y = top + cy * map_size;
 
-                        let mut paint = Paint::default();
-                        paint.set_color_rgba8(255, 0, 0, 255);
-                        paint.anti_alias = true;
+                            let mut paint = Paint::default();
+                            paint.set_color_rgba8(255, 0, 0, 255);
+                            paint.anti_alias = true;
 
-                        if let Some(path) = PathBuilder::from_circle(dot_x, dot_y, 4.0 * el.scale) {
-                            pixmap.fill_path(
-                                &path,
-                                &paint,
-                                tiny_skia::FillRule::Winding,
-                                Transform::identity(),
-                                None,
-                            );
+                            if let Some(path) =
+                                PathBuilder::from_circle(dot_x, dot_y, 4.0 * el.scale)
+                            {
+                                pixmap.fill_path(
+                                    &path,
+                                    &paint,
+                                    tiny_skia::FillRule::Winding,
+                                    Transform::identity(),
+                                    None,
+                                );
+                            }
                         }
                     }
                 }
@@ -367,10 +363,8 @@ pub fn render_overlay_skia(
 
                 let mut paint_stroke = Paint::default();
                 paint_stroke.set_color_rgba8(255, 255, 255, 255);
-                let stroke = tiny_skia::Stroke {
-                    width: 1.0,
-                    ..Default::default()
-                };
+                let mut stroke = Stroke::default();
+                stroke.width = 1.0;
 
                 let mut pb = PathBuilder::new();
                 pb.move_to(left, top);
@@ -383,12 +377,13 @@ pub fn render_overlay_skia(
                 }
 
                 let fill_h = max_h * throttle;
-                if fill_h > 0.0
-                    && let Some(fill_rect) = Rect::from_xywh(left, top + max_h - fill_h, w, fill_h)
-                {
-                    let mut paint_fill = Paint::default();
-                    paint_fill.set_color_rgba8(0, 255, 0, 255);
-                    pixmap.fill_rect(fill_rect, &paint_fill, Transform::identity(), None);
+                if fill_h > 0.0 {
+                    if let Some(fill_rect) = Rect::from_xywh(left, top + max_h - fill_h, w, fill_h)
+                    {
+                        let mut paint_fill = Paint::default();
+                        paint_fill.set_color_rgba8(0, 255, 0, 255);
+                        pixmap.fill_rect(fill_rect, &paint_fill, Transform::identity(), None);
+                    }
                 }
             }
         }

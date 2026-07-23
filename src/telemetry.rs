@@ -109,11 +109,11 @@ impl TelemetryLog {
         let mut laps = Vec::new();
         let mut current_lap = None;
         for s in &self.samples {
-            if let Some(lap) = s.lap_number
-                && Some(lap) != current_lap
-            {
-                current_lap = Some(lap);
-                laps.push((lap, s.time_ms));
+            if let Some(lap) = s.lap_number {
+                if Some(lap) != current_lap {
+                    current_lap = Some(lap);
+                    laps.push((lap, s.time_ms));
+                }
             }
         }
         laps

@@ -7,7 +7,7 @@ use std::process::Command;
 pub fn extract_gopro_gps(video_path: &str) -> Result<Vec<(i64, f64, f64)>> {
     // 1. Find telemetry stream
     let probe = Command::new("ffprobe")
-        .args([
+        .args(&[
             "-v",
             "error",
             "-select_streams",
@@ -37,7 +37,7 @@ pub fn extract_gopro_gps(video_path: &str) -> Result<Vec<(i64, f64, f64)>> {
     // 2. Dump stream data using ffmpeg to a temporary file
     let temp_gpmf = tempfile::NamedTempFile::new()?;
     let status = Command::new("ffmpeg")
-        .args([
+        .args(&[
             "-y",
             "-i",
             video_path,
