@@ -1,15 +1,15 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
+use chrono::{DateTime, Utc};
+use crossbeam_channel::{Sender, unbounded};
+use eframe::egui;
+use ffmpeg_next as ffmpeg;
+use log::{error, warn};
+use lru::LruCache;
+use std::num::NonZeroUsize;
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use chrono::{DateTime, Utc};
-use ffmpeg_next as ffmpeg;
-use log::{warn, error};
-use crossbeam_channel::{unbounded, Sender};
-use lru::LruCache;
-use std::num::NonZeroUsize;
-use eframe::egui;
 
 #[derive(Clone)]
 pub struct DecodedFrame {
@@ -47,20 +47,24 @@ impl VideoPlayer {
 
         let mut creation_time_utc = None;
         if let Ok(output) = Command::new("ffprobe")
-            .args(&[
-                "-v", "quiet",
-                "-select_streams", "v:0",
-                "-show_entries", "stream_tags=creation_time",
-                "-of", "default=noprint_wrappers=1:nokey=1",
+            .args([
+                "-v",
+                "quiet",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream_tags=creation_time",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
                 &path_str,
             ])
             .output()
         {
             let time_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !time_str.is_empty() {
-                if let Ok(dt) = DateTime::parse_from_rfc3339(&time_str) {
-                    creation_time_utc = Some(dt.with_timezone(&Utc));
-                }
+            if !time_str.is_empty()
+                && let Ok(dt) = DateTime::parse_from_rfc3339(&time_str)
+            {
+                creation_time_utc = Some(dt.with_timezone(&Utc));
             }
         }
 
@@ -97,10 +101,17 @@ impl VideoPlayer {
         thread::spawn(move || {
             let mut input_ctx = match ffmpeg::format::input(&path_for_thread) {
                 Ok(ctx) => ctx,
-                Err(e) => { error!("Failed to open video in bg thread: {}", e); return; }
+                Err(e) => {
+                    error!("Failed to open video in bg thread: {}", e);
+                    return;
+                }
             };
-            let stream = input_ctx.streams().best(ffmpeg::media::Type::Video).unwrap();
-            let codec_ctx = ffmpeg::codec::context::Context::from_parameters(stream.parameters()).unwrap();
+            let stream = input_ctx
+                .streams()
+                .best(ffmpeg::media::Type::Video)
+                .unwrap();
+            let codec_ctx =
+                ffmpeg::codec::context::Context::from_parameters(stream.parameters()).unwrap();
             let mut decoder = codec_ctx.decoder().video().unwrap();
 
             let mut scaler = ffmpeg::software::scaling::Context::get(
@@ -111,9 +122,11 @@ impl VideoPlayer {
                 width,
                 height,
                 ffmpeg::software::scaling::flag::Flags::FAST_BILINEAR,
-            ).unwrap();
+            )
+            .unwrap();
 
-            let mut frame_cache: LruCache<i64, DecodedFrame> = LruCache::new(NonZeroUsize::new(200).unwrap());
+            let mut frame_cache: LruCache<i64, DecodedFrame> =
+                LruCache::new(NonZeroUsize::new(200).unwrap());
             let mut current_decoder_pts = start_pts;
 
             loop {
@@ -153,7 +166,7 @@ impl VideoPlayer {
                 let pts_diff = target_pts - current_decoder_pts;
                 let ms_diff = pts_diff as f64 * time_base * 1000.0;
 
-                if ms_diff < 0.0 || ms_diff > 2000.0 {
+                if !(0.0..=2000.0).contains(&ms_diff) {
                     // Seek operates in AV_TIME_BASE by default with this ffmpeg wrapper
                     let seek_ts_av = final_time_ms * 1000;
                     if input_ctx.seek(seek_ts_av, ..).is_ok() {
@@ -167,11 +180,11 @@ impl VideoPlayer {
                 }
 
                 let mut decoded = ffmpeg::frame::Video::empty();
-                let mut packet_iter = input_ctx.packets();
+                let packet_iter = input_ctx.packets();
 
                 let mut attempt_limit = 1000;
 
-                while let Some((stream, packet)) = packet_iter.next() {
+                for (stream, packet) in packet_iter {
                     if attempt_limit == 0 {
                         warn!("Timed out decoding forward to PTS {}", target_pts);
                         break;
@@ -191,7 +204,7 @@ impl VideoPlayer {
                             if scaler.run(&decoded, &mut rgb_frame).is_ok() {
                                 let w = rgb_frame.width() as usize;
                                 let h = rgb_frame.height() as usize;
-                                let stride = rgb_frame.stride(0) as usize;
+                                let stride = rgb_frame.stride(0);
 
                                 let mut packed_data = Vec::with_capacity(w * h * 4);
                                 let raw_data = rgb_frame.data(0);

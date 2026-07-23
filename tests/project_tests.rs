@@ -1,6 +1,6 @@
 use std::path::PathBuf;
-use track_overlay::project::{OverlayElement, OverlayKind, ProjectConfig, SyncMode, SyncState};
 use tempfile::NamedTempFile;
+use track_overlay::project::{OverlayElement, OverlayKind, ProjectConfig, SyncMode, SyncState};
 
 #[test]
 fn test_default_config_serialization() {
@@ -10,7 +10,8 @@ fn test_default_config_serialization() {
     let json = serde_json::to_string(&config).expect("Failed to serialize default config");
 
     // Test deserialization
-    let loaded_config: ProjectConfig = serde_json::from_str(&json).expect("Failed to deserialize default config");
+    let loaded_config: ProjectConfig =
+        serde_json::from_str(&json).expect("Failed to deserialize default config");
 
     // Verify equality
     assert_eq!(config, loaded_config);
@@ -47,7 +48,8 @@ fn test_custom_config_serialization() {
     let json = serde_json::to_string(&config).expect("Failed to serialize custom config");
 
     // Test deserialization
-    let loaded_config: ProjectConfig = serde_json::from_str(&json).expect("Failed to deserialize custom config");
+    let loaded_config: ProjectConfig =
+        serde_json::from_str(&json).expect("Failed to deserialize custom config");
 
     // Verify equality
     assert_eq!(config, loaded_config);
@@ -64,20 +66,20 @@ fn test_config_save_and_load() {
         },
         flip_vertical: false,
         flip_horizontal: true,
-        elements: vec![
-            OverlayElement {
-                kind: OverlayKind::TrackMap,
-                x: 0.1,
-                y: 0.1,
-                scale: 2.0,
-            },
-        ],
+        elements: vec![OverlayElement {
+            kind: OverlayKind::TrackMap,
+            x: 0.1,
+            y: 0.1,
+            scale: 2.0,
+        }],
     };
 
     let temp_file = NamedTempFile::new().expect("Failed to create temp file");
 
     // Save to temp file
-    config.save(temp_file.path()).expect("Failed to save config");
+    config
+        .save(temp_file.path())
+        .expect("Failed to save config");
 
     // Load from temp file
     let loaded_config = ProjectConfig::load(temp_file.path()).expect("Failed to load config");

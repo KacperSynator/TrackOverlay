@@ -18,16 +18,11 @@ pub struct OverlayElement {
     pub scale: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum SyncMode {
+    #[default]
     Manual,
     Auto,
-}
-
-impl Default for SyncMode {
-    fn default() -> Self {
-        SyncMode::Manual
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

@@ -1,7 +1,7 @@
 use anyhow::Result;
+use chrono::{DateTime, TimeZone, Utc};
 use serde::Deserialize;
 use std::path::Path;
-use chrono::{DateTime, Utc, TimeZone};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
@@ -67,7 +67,13 @@ impl TelemetryLog {
 
             if i == 0 {
                 // Assuming UTC Time is unix timestamp in seconds
-                if let Some(dt) = Utc.timestamp_opt(row.utc_time as i64, ((row.utc_time.fract()) * 1_000_000_000.0) as u32).single() {
+                if let Some(dt) = Utc
+                    .timestamp_opt(
+                        row.utc_time as i64,
+                        ((row.utc_time.fract()) * 1_000_000_000.0) as u32,
+                    )
+                    .single()
+                {
                     start_time_utc = Some(dt);
                 }
             }
@@ -92,7 +98,10 @@ impl TelemetryLog {
             });
         }
 
-        Ok(Self { samples, start_time_utc })
+        Ok(Self {
+            samples,
+            start_time_utc,
+        })
     }
 
     /// Returns a list of (lap_number, start_time_ms) by scanning the samples
@@ -100,11 +109,11 @@ impl TelemetryLog {
         let mut laps = Vec::new();
         let mut current_lap = None;
         for s in &self.samples {
-            if let Some(lap) = s.lap_number {
-                if Some(lap) != current_lap {
-                    current_lap = Some(lap);
-                    laps.push((lap, s.time_ms));
-                }
+            if let Some(lap) = s.lap_number
+                && Some(lap) != current_lap
+            {
+                current_lap = Some(lap);
+                laps.push((lap, s.time_ms));
             }
         }
         laps

@@ -18,11 +18,21 @@ fn create_sample(time_ms: i64, lat: f64, lon: f64, lap_number: Option<u32>) -> T
 #[test]
 fn test_auto_correlate_empty_data() {
     let empty_gopro: Vec<(i64, f64, f64)> = vec![];
-    let empty_telemetry = TelemetryLog { samples: vec![], start_time_utc: None };
+    let empty_telemetry = TelemetryLog {
+        samples: vec![],
+        start_time_utc: None,
+    };
     assert_eq!(auto_correlate_gps(&empty_gopro, &empty_telemetry), None);
 }
 
-fn generate_circular_track(center_lat: f64, center_lon: f64, radius_deg: f64, num_points: usize, start_time: i64, time_step: i64) -> Vec<(i64, f64, f64)> {
+fn generate_circular_track(
+    center_lat: f64,
+    center_lon: f64,
+    radius_deg: f64,
+    num_points: usize,
+    start_time: i64,
+    time_step: i64,
+) -> Vec<(i64, f64, f64)> {
     let mut points = Vec::new();
     for i in 0..num_points {
         let angle = 2.0 * std::f64::consts::PI * (i as f64) / (num_points as f64);
@@ -87,7 +97,11 @@ fn test_auto_correlate_distance_fallback() {
     };
     let mut gopro_data_zero = Vec::new();
     for g_time in (0..20000).step_by(100) {
-        let sample = telemetry_data.samples.iter().find(|s| s.time_ms == g_time).unwrap();
+        let sample = telemetry_data
+            .samples
+            .iter()
+            .find(|s| s.time_ms == g_time)
+            .unwrap();
         gopro_data_zero.push((g_time, sample.lat, sample.lon));
     }
     let offset = auto_correlate_gps(&gopro_data_zero, &telemetry_data);
@@ -125,5 +139,8 @@ fn test_auto_correlate_failure() {
     }
 
     let offset = auto_correlate_gps(&gopro_data, &telemetry_data);
-    assert_eq!(offset, None, "Expected correlation to fail for completely unmatched tracks");
+    assert_eq!(
+        offset, None,
+        "Expected correlation to fail for completely unmatched tracks"
+    );
 }
