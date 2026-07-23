@@ -265,25 +265,21 @@ impl MyApp {
                             };
 
                             thread::spawn(move || {
-                                if let Ok(gps_data) = extract_gopro_gps(&video_path) {
-                                    if let Some(offset) =
+                                if let Ok(gps_data) = extract_gopro_gps(&video_path)
+                                    && let Some(offset) =
                                         auto_correlate_gps(&gps_data, &telem_clone)
-                                    {
-                                        if let Ok(mut lock) = progress.lock() {
+                                        && let Ok(mut lock) = progress.lock() {
                                             *lock = Some(offset);
                                         }
-                                    }
-                                }
                             });
                         }
                     } else {
                         let mut done = false;
-                        if let Ok(lock) = self.auto_sync_progress.as_ref().unwrap().lock() {
-                            if let Some(offset) = *lock {
+                        if let Ok(lock) = self.auto_sync_progress.as_ref().unwrap().lock()
+                            && let Some(offset) = *lock {
                                 self.config.sync.offset_ms = offset;
                                 done = true;
                             }
-                        }
                         if done {
                             self.auto_sync_progress = None;
                         } else {
@@ -305,7 +301,7 @@ impl MyApp {
 
                 ui.separator();
                 ui.label("Layout Editor");
-                for (_i, el) in self.config.elements.iter_mut().enumerate() {
+                for el in self.config.elements.iter_mut() {
                     ui.horizontal(|ui| {
                         ui.label(format!("{:?}", el.kind));
                         ui.add(egui::Slider::new(&mut el.x, 0.0..=1.0).text("X"));
@@ -352,12 +348,11 @@ impl MyApp {
                         self.telemetry_laps.clear();
                         let mut current_lap = None;
                         for s in &log.samples {
-                            if let Some(lap) = s.lap_number {
-                                if Some(lap) != current_lap {
+                            if let Some(lap) = s.lap_number
+                                && Some(lap) != current_lap {
                                     current_lap = Some(lap);
                                     self.telemetry_laps.push((lap, s.time_ms));
                                 }
-                            }
                         }
 
                         self.trackmap = TrackMap::from_telemetry(&log, &self.telemetry_laps);
@@ -463,14 +458,10 @@ impl MyApp {
                 let mut max_pos = egui::pos2(1.0, 1.0);
 
                 if self.config.flip_horizontal {
-                    let tmp = min_pos.x;
-                    min_pos.x = max_pos.x;
-                    max_pos.x = tmp;
+                    std::mem::swap(&mut min_pos.x, &mut max_pos.x);
                 }
                 if self.config.flip_vertical {
-                    let tmp = min_pos.y;
-                    min_pos.y = max_pos.y;
-                    max_pos.y = tmp;
+                    std::mem::swap(&mut min_pos.y, &mut max_pos.y);
                 }
 
                 ui.painter().image(

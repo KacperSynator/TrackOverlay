@@ -108,12 +108,11 @@ pub fn export_video(
 
             while decoder.receive_frame(&mut decoded).is_ok() {
                 frames_done += 1;
-                if let Some(p) = &progress {
-                    if let Ok(mut lock) = p.lock() {
+                if let Some(p) = &progress
+                    && let Ok(mut lock) = p.lock() {
                         lock.frames_done = frames_done;
                         lock.total_frames = total_frames.max(frames_done);
                     }
-                }
 
                 scaler_to_rgba.run(&decoded, &mut rgba_frame)?;
 
@@ -167,12 +166,11 @@ pub fn export_video(
     decoder.send_eof()?;
     while decoder.receive_frame(&mut decoded).is_ok() {
         frames_done += 1;
-        if let Some(p) = &progress {
-            if let Ok(mut lock) = p.lock() {
+        if let Some(p) = &progress
+            && let Ok(mut lock) = p.lock() {
                 lock.frames_done = frames_done;
                 lock.total_frames = total_frames.max(frames_done);
             }
-        }
 
         scaler_to_rgba.run(&decoded, &mut rgba_frame)?;
 

@@ -123,15 +123,14 @@ pub fn render_overlay(
                         painter.circle_filled(mid_p, 3.0 * el.scale, egui::Color32::GREEN);
                     }
 
-                    if let Some(s) = sample {
-                        if let Some((cx, cy)) = map.point_at_time(s.time_ms) {
+                    if let Some(s) = sample
+                        && let Some((cx, cy)) = map.point_at_time(s.time_ms) {
                             let dot_pos = egui::pos2(
                                 map_rect.left() + cx * map_rect.width(),
                                 map_rect.top() + cy * map_rect.height(),
                             );
                             painter.circle_filled(dot_pos, 4.0 * el.scale, egui::Color32::RED);
                         }
-                    }
                 }
             }
             OverlayKind::ThrottleBar => {
@@ -322,8 +321,8 @@ pub fn render_overlay_skia(
                         }
                     }
 
-                    if let Some(s) = sample {
-                        if let Some((cx, cy)) = map.point_at_time(s.time_ms) {
+                    if let Some(s) = sample
+                        && let Some((cx, cy)) = map.point_at_time(s.time_ms) {
                             let dot_x = left + cx * map_size;
                             let dot_y = top + cy * map_size;
 
@@ -343,7 +342,6 @@ pub fn render_overlay_skia(
                                 );
                             }
                         }
-                    }
                 }
             }
             OverlayKind::ThrottleBar => {
@@ -377,14 +375,13 @@ pub fn render_overlay_skia(
                 }
 
                 let fill_h = max_h * throttle;
-                if fill_h > 0.0 {
-                    if let Some(fill_rect) = Rect::from_xywh(left, top + max_h - fill_h, w, fill_h)
+                if fill_h > 0.0
+                    && let Some(fill_rect) = Rect::from_xywh(left, top + max_h - fill_h, w, fill_h)
                     {
                         let mut paint_fill = Paint::default();
                         paint_fill.set_color_rgba8(0, 255, 0, 255);
                         pixmap.fill_rect(fill_rect, &paint_fill, Transform::identity(), None);
                     }
-                }
             }
         }
     }
