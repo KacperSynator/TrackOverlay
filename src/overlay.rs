@@ -126,7 +126,7 @@ pub fn render_overlay(
                 painter.rect_stroke(
                     bg_rect,
                     2.0,
-                    egui::Stroke::new(1.0, egui::Color32::WHITE),
+                    egui::Stroke::new(1.0_f32, egui::Color32::WHITE),
                     egui::StrokeKind::Inside,
                 );
 
