@@ -1,5 +1,5 @@
 use crate::telemetry::TelemetryLog;
-use log::{info, warn, debug};
+use log::{debug, info, warn};
 
 /// Auto-correlates two GPS traces to find the time offset.
 /// Returns the offset_ms that should be added to the video playhead
@@ -10,7 +10,10 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
         return None;
     }
 
-    info!("Preparing Gopro GPS data for correlation ({} points)", gopro_gps.len());
+    info!(
+        "Preparing Gopro GPS data for correlation ({} points)",
+        gopro_gps.len()
+    );
 
     // Primary Strategy: Lap Line Crossings
     // 1. Get telemetry lap crossings
@@ -18,7 +21,10 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
 
     // We need at least one lap crossing in the telemetry
     if !telem_laps.is_empty() {
-        info!("Found {} lap crossings in telemetry. Attempting Start/Finish detection...", telem_laps.len());
+        info!(
+            "Found {} lap crossings in telemetry. Attempting Start/Finish detection...",
+            telem_laps.len()
+        );
 
         // Let's find the GPS coordinate of the Start/Finish line from the first lap crossing
         let first_lap_ms = telem_laps[0].1;
@@ -54,7 +60,10 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
                 gopro_crossings.push(local_min_time);
             }
 
-            info!("Detected {} Start/Finish crossings in GoPro GPS track.", gopro_crossings.len());
+            info!(
+                "Detected {} Start/Finish crossings in GoPro GPS track.",
+                gopro_crossings.len()
+            );
 
             // 3. Find the offset that matches the highest number of laps between the two arrays
             if !gopro_crossings.is_empty() {
@@ -70,7 +79,10 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
                         let mut matches = 0;
                         for &g_check in &gopro_crossings {
                             let mapped_time = g_check + potential_offset;
-                            if telem_laps.iter().any(|&(_, t)| (t - mapped_time).abs() <= tolerance_ms) {
+                            if telem_laps
+                                .iter()
+                                .any(|&(_, t)| (t - mapped_time).abs() <= tolerance_ms)
+                            {
                                 matches += 1;
                             }
                         }
@@ -83,13 +95,20 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
                 }
 
                 if max_matches > 0 {
-                    info!("Lap-based correlation successful! Found {} matching laps with offset {} ms", max_matches, best_offset);
+                    info!(
+                        "Lap-based correlation successful! Found {} matching laps with offset {} ms",
+                        max_matches, best_offset
+                    );
                     return Some(best_offset);
                 } else {
-                    warn!("Lap-based correlation found crossings but couldn't match cadence. Falling back to distance least-squares...");
+                    warn!(
+                        "Lap-based correlation found crossings but couldn't match cadence. Falling back to distance least-squares..."
+                    );
                 }
             } else {
-                warn!("No Start/Finish crossings detected in GoPro track. Falling back to distance least-squares...");
+                warn!(
+                    "No Start/Finish crossings detected in GoPro track. Falling back to distance least-squares..."
+                );
             }
         }
     } else {
@@ -100,7 +119,10 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
     auto_correlate_gps_fallback(gopro_gps, telemetry)
 }
 
-fn auto_correlate_gps_fallback(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLog) -> Option<i64> {
+fn auto_correlate_gps_fallback(
+    gopro_gps: &[(i64, f64, f64)],
+    telemetry: &TelemetryLog,
+) -> Option<i64> {
     let mut gopro_dist = Vec::new();
     let (t0, lat0, lon0) = gopro_gps[0];
     for &(t, lat, lon) in gopro_gps {
@@ -139,7 +161,8 @@ fn auto_correlate_gps_fallback(gopro_gps: &[(i64, f64, f64)], telemetry: &Teleme
             }
         }
 
-        if count > gopro_dist.len() / 4 { // Need at least 25% overlap
+        if count > gopro_dist.len() / 4 {
+            // Need at least 25% overlap
             error /= count as f64;
             if error < min_error {
                 min_error = error;
@@ -152,7 +175,10 @@ fn auto_correlate_gps_fallback(gopro_gps: &[(i64, f64, f64)], telemetry: &Teleme
         warn!("Auto-sync failed to find adequate overlap between GPS and telemetry paths.");
         None
     } else {
-        info!("Auto-sync fallback found best offset {} ms with error {}", best_offset, min_error);
+        info!(
+            "Auto-sync fallback found best offset {} ms with error {}",
+            best_offset, min_error
+        );
         Some(best_offset)
     }
 }
@@ -161,9 +187,8 @@ fn haversine(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let r = 6371000.0; // Earth radius in meters
     let d_lat = (lat2 - lat1).to_radians();
     let d_lon = (lon2 - lon1).to_radians();
-    let a = (d_lat / 2.0).sin().powi(2) +
-            lat1.to_radians().cos() * lat2.to_radians().cos() *
-            (d_lon / 2.0).sin().powi(2);
+    let a = (d_lat / 2.0).sin().powi(2)
+        + lat1.to_radians().cos() * lat2.to_radians().cos() * (d_lon / 2.0).sin().powi(2);
     let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
     r * c
 }
