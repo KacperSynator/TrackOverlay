@@ -443,7 +443,9 @@ impl MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+
         if self.is_playing {
             let dt = ctx.input(|i| i.stable_dt);
             self.playhead_ms += (dt * 1000.0) as i64;
@@ -454,10 +456,6 @@ impl eframe::App for MyApp {
             ctx.request_repaint();
         }
 
-        self.build_ui(ctx);
-    }
-
-    fn ui(&mut self, _ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // Not used, ui logic handled inside update() manually
+        self.build_ui(&ctx);
     }
 }
