@@ -6,7 +6,7 @@ use track_overlay::video::VideoPlayer;
 fn test_video_decode() {
     let test_vid_path = "/tmp/test_video.mp4";
     let status = Command::new("ffmpeg")
-        .args([
+        .args(&[
             "-y",
             "-f",
             "lavfi",

@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use track_overlay::export::export_video;
 use track_overlay::gpmf_extract::extract_gopro_gps;
 use track_overlay::overlay::render_overlay;
 use track_overlay::project::{ProjectConfig, SyncMode};
@@ -61,7 +60,7 @@ fn main() -> eframe::Result {
         };
 
         info!("Beginning batch export to {:?}", output_path);
-        let _ = export_video(&config, &telemetry, &output_path);
+        let _ = track_overlay::export::export_video(&config, &telemetry, &output_path, None);
         return Ok(());
     }
 
@@ -92,6 +91,9 @@ struct MyApp {
     #[allow(dead_code)]
     data_dir: Option<PathBuf>,
     export_progress: Option<String>,
+    active_export_progress: Option<Arc<Mutex<track_overlay::export::ExportProgress>>>,
+    export_rx: crossbeam_channel::Receiver<anyhow::Result<()>>,
+    export_tx: crossbeam_channel::Sender<anyhow::Result<()>>,
 
     file_dialog: FileDialog,
     dialog_mode: DialogMode,
@@ -114,6 +116,7 @@ enum DialogMode {
 
 impl MyApp {
     fn new(data_dir: Option<PathBuf>) -> Self {
+        let (tx, rx) = crossbeam_channel::unbounded();
         let mut fd = FileDialog::new().default_size([600.0, 400.0]);
 
         if let Some(ref dir) = data_dir {
@@ -129,6 +132,9 @@ impl MyApp {
             auto_sync_progress: None,
             data_dir,
             export_progress: None,
+            active_export_progress: None,
+            export_rx: rx,
+            export_tx: tx,
             file_dialog: fd,
             dialog_mode: DialogMode::None,
             video_player: None,
@@ -373,13 +379,21 @@ impl MyApp {
 
                     self.export_progress = Some(format!("Exporting to {:?}...", path_buf));
 
-                    match export_video(&config_clone, &telem_clone, &path_buf) {
-                        Ok(_) => {
-                            self.export_progress =
-                                Some("Export completed successfully.".to_string())
-                        }
-                        Err(e) => self.export_progress = Some(format!("Export failed: {}", e)),
-                    }
+                    let progress_arc =
+                        Arc::new(Mutex::new(track_overlay::export::ExportProgress::default()));
+                    self.active_export_progress = Some(progress_arc.clone());
+                    let path_clone = path_buf.clone();
+                    let tx = self.export_tx.clone();
+                    std::thread::spawn(move || {
+                        let res = track_overlay::export::export_video(
+                            &config_clone,
+                            &telem_clone,
+                            &path_clone,
+                            Some(progress_arc),
+                        );
+                        let _ = tx.send(res);
+                    });
+                    self.export_progress = Some("Exporting in background...".to_string());
                 }
                 DialogMode::None => {}
             }
@@ -488,11 +502,7 @@ impl MyApp {
 
             ui.scope_builder(egui::UiBuilder::new().max_rect(centered_controls), |ui| {
                 ui.horizontal(|ui| {
-                    let btn_text = if self.is_playing {
-                        "⏸ Pause"
-                    } else {
-                        "▶ Play"
-                    };
+                    let btn_text = if self.is_playing { "Pause" } else { "Play" };
                     if ui.button(btn_text).clicked() {
                         self.is_playing = !self.is_playing;
                     }
@@ -518,6 +528,20 @@ impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
 
+        if let Ok(res) = self.export_rx.try_recv() {
+            self.active_export_progress = None;
+            match res {
+                Ok(_) => self.export_progress = Some("Export completed successfully.".to_string()),
+                Err(e) => self.export_progress = Some(format!("Export failed: {}", e)),
+            }
+        }
+        if let Some(arc) = &self.active_export_progress {
+            if let Ok(lock) = arc.lock() {
+                let text = format!("Exporting: {} / {}", lock.frames_done, lock.total_frames);
+                self.export_progress = Some(text);
+            }
+            ctx.request_repaint();
+        }
         if self.is_playing {
             let dt = ctx.input(|i| i.stable_dt);
             self.playhead_ms += (dt * 1000.0) as i64;
