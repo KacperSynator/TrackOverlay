@@ -38,21 +38,6 @@ jobs:
       - name: Run cargo clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'run-ci')
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libavutil-dev libavformat-dev libavcodec-dev libswscale-dev libavdevice-dev libavfilter-dev ffmpeg
-      - name: Install minimal stable
-        uses: dtolnay/rust-toolchain@stable
-      - name: Run cargo build
-        run: cargo build --verbose
-
   test:
     name: Test
     runs-on: ubuntu-latest
