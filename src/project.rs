@@ -40,7 +40,6 @@ pub struct ProjectConfig {
     pub flip_horizontal: bool,
 }
 
-
 impl ProjectConfig {
     pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(self)?;
