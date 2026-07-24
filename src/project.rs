@@ -10,7 +10,7 @@ pub enum OverlayKind {
     ThrottleBar,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OverlayElement {
     pub kind: OverlayKind,
     pub x: f32,
@@ -18,25 +18,20 @@ pub struct OverlayElement {
     pub scale: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum SyncMode {
+    #[default]
     Manual,
     Auto,
 }
 
-impl Default for SyncMode {
-    fn default() -> Self {
-        SyncMode::Manual
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct SyncState {
     pub offset_ms: i64,
     pub mode: SyncMode,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProjectConfig {
     pub video_path: PathBuf,
     pub telemetry_path: PathBuf,

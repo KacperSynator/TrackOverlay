@@ -1,19 +1,18 @@
-use eframe::egui;
 use clap::Parser;
+use eframe::egui;
+use egui_file_dialog::FileDialog;
+use log::{error, info, warn};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use egui_file_dialog::FileDialog;
-use log::{info, error, warn};
 
-use track_overlay::project::{ProjectConfig, SyncMode};
-use track_overlay::telemetry::TelemetryLog;
-use track_overlay::overlay::render_overlay;
-use track_overlay::export::export_video;
 use track_overlay::gpmf_extract::extract_gopro_gps;
+use track_overlay::overlay::render_overlay;
+use track_overlay::project::{ProjectConfig, SyncMode};
 use track_overlay::sync::auto_correlate_gps;
-use track_overlay::video::VideoPlayer;
+use track_overlay::telemetry::TelemetryLog;
 use track_overlay::trackmap::TrackMap;
+use track_overlay::video::VideoPlayer;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -48,14 +47,20 @@ fn main() -> eframe::Result {
             info!("Loading telemetry from {:?}", config.telemetry_path);
             TelemetryLog::load_csv(&config.telemetry_path).unwrap_or_else(|e| {
                 error!("Failed to load telemetry: {}", e);
-                TelemetryLog { samples: vec![], start_time_utc: None }
+                TelemetryLog {
+                    samples: vec![],
+                    start_time_utc: None,
+                }
             })
         } else {
-            TelemetryLog { samples: vec![], start_time_utc: None }
+            TelemetryLog {
+                samples: vec![],
+                start_time_utc: None,
+            }
         };
 
         info!("Beginning batch export to {:?}", output_path);
-        let _ = export_video(&config, &telemetry, &output_path);
+        let _ = track_overlay::export::export_video(&config, &telemetry, &output_path, None);
         return Ok(());
     }
 
@@ -85,6 +90,9 @@ struct MyApp {
     auto_sync_progress: Option<Arc<Mutex<Option<i64>>>>,
     data_dir: Option<PathBuf>,
     export_progress: Option<String>,
+    active_export_progress: Option<Arc<Mutex<track_overlay::export::ExportProgress>>>,
+    export_rx: crossbeam_channel::Receiver<anyhow::Result<()>>,
+    export_tx: crossbeam_channel::Sender<anyhow::Result<()>>,
 
     file_dialog: FileDialog,
     dialog_mode: DialogMode,
@@ -107,8 +115,8 @@ enum DialogMode {
 
 impl MyApp {
     fn new(data_dir: Option<PathBuf>) -> Self {
-        let mut fd = FileDialog::new()
-            .default_size([600.0, 400.0]);
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let mut fd = FileDialog::new().default_size([600.0, 400.0]);
 
         if let Some(ref dir) = data_dir {
             fd = fd.initial_directory(dir.clone());
@@ -123,6 +131,9 @@ impl MyApp {
             auto_sync_progress: None,
             data_dir,
             export_progress: None,
+            active_export_progress: None,
+            export_rx: rx,
+            export_tx: tx,
             file_dialog: fd,
             dialog_mode: DialogMode::None,
             video_player: None,
@@ -150,11 +161,21 @@ impl MyApp {
                         self.dialog_mode = DialogMode::PickVideo;
                         self.file_dialog.pick_file();
                     }
-                    ui.label(self.config.video_path.file_name().unwrap_or_default().to_string_lossy().as_ref());
+                    ui.label(
+                        self.config
+                            .video_path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .as_ref(),
+                    );
                 });
                 if let Some(vp) = &self.video_player {
                     if let Some(dt) = vp.creation_time_utc {
-                        ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+                        ui.label(format!(
+                            "  Timestamp: {}",
+                            dt.format("%Y-%m-%d %H:%M:%S UTC")
+                        ));
                     }
                     ui.label(format!("  Duration: {}s", self.video_duration_ms / 1000));
                 }
@@ -166,23 +187,43 @@ impl MyApp {
                         self.dialog_mode = DialogMode::PickTelemetry;
                         self.file_dialog.pick_file();
                     }
-                    ui.label(self.config.telemetry_path.file_name().unwrap_or_default().to_string_lossy().as_ref());
+                    ui.label(
+                        self.config
+                            .telemetry_path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .as_ref(),
+                    );
                 });
                 if let Some(telem) = &self.telemetry {
                     if let Some(dt) = telem.start_time_utc {
-                        ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+                        ui.label(format!(
+                            "  Timestamp: {}",
+                            dt.format("%Y-%m-%d %H:%M:%S UTC")
+                        ));
                     }
                     if !telem.samples.is_empty() {
-                        let telem_dur = telem.samples.last().unwrap().time_ms - telem.samples.first().unwrap().time_ms;
+                        let telem_dur = telem.samples.last().unwrap().time_ms
+                            - telem.samples.first().unwrap().time_ms;
                         ui.label(format!("  Data Length: {}s", telem_dur / 1000));
                     }
 
                     if !self.telemetry_laps.is_empty() {
                         ui.collapsing("Laps", |ui| {
                             for (lap_num, start_time) in &self.telemetry_laps {
-                                if ui.button(format!("Jump to Lap {} ({}s)", lap_num, start_time / 1000)).clicked() {
+                                if ui
+                                    .button(format!(
+                                        "Jump to Lap {} ({}s)",
+                                        lap_num,
+                                        start_time / 1000
+                                    ))
+                                    .clicked()
+                                {
                                     let target_playhead = start_time - self.config.sync.offset_ms;
-                                    if target_playhead >= 0 && target_playhead <= self.video_duration_ms {
+                                    if target_playhead >= 0
+                                        && target_playhead <= self.video_duration_ms
+                                    {
                                         self.playhead_ms = target_playhead;
                                     }
                                 }
@@ -212,29 +253,33 @@ impl MyApp {
 
                             let video_path = self.config.video_path.to_string_lossy().to_string();
                             let telem_clone = if let Some(t) = &self.telemetry {
-                                TelemetryLog { samples: t.samples.clone(), start_time_utc: t.start_time_utc }
+                                TelemetryLog {
+                                    samples: t.samples.clone(),
+                                    start_time_utc: t.start_time_utc,
+                                }
                             } else {
-                                TelemetryLog { samples: vec![], start_time_utc: None }
+                                TelemetryLog {
+                                    samples: vec![],
+                                    start_time_utc: None,
+                                }
                             };
 
                             thread::spawn(move || {
-                                if let Ok(gps_data) = extract_gopro_gps(&video_path) {
-                                    if let Some(offset) = auto_correlate_gps(&gps_data, &telem_clone) {
-                                        if let Ok(mut lock) = progress.lock() {
+                                if let Ok(gps_data) = extract_gopro_gps(&video_path)
+                                    && let Some(offset) =
+                                        auto_correlate_gps(&gps_data, &telem_clone)
+                                        && let Ok(mut lock) = progress.lock() {
                                             *lock = Some(offset);
                                         }
-                                    }
-                                }
                             });
                         }
                     } else {
                         let mut done = false;
-                        if let Ok(lock) = self.auto_sync_progress.as_ref().unwrap().lock() {
-                            if let Some(offset) = *lock {
+                        if let Ok(lock) = self.auto_sync_progress.as_ref().unwrap().lock()
+                            && let Some(offset) = *lock {
                                 self.config.sync.offset_ms = offset;
                                 done = true;
                             }
-                        }
                         if done {
                             self.auto_sync_progress = None;
                         } else {
@@ -243,14 +288,20 @@ impl MyApp {
                         }
                     }
 
-                    ui.label(format!("Computed offset: {} ms", self.config.sync.offset_ms));
+                    ui.label(format!(
+                        "Computed offset: {} ms",
+                        self.config.sync.offset_ms
+                    ));
                 } else {
-                    ui.add(egui::Slider::new(&mut self.config.sync.offset_ms, -120000..=120000).text("Sync Offset (ms)"));
+                    ui.add(
+                        egui::Slider::new(&mut self.config.sync.offset_ms, -120000..=120000)
+                            .text("Sync Offset (ms)"),
+                    );
                 }
 
                 ui.separator();
                 ui.label("Layout Editor");
-                for (_i, el) in self.config.elements.iter_mut().enumerate() {
+                for el in self.config.elements.iter_mut() {
                     ui.horizontal(|ui| {
                         ui.label(format!("{:?}", el.kind));
                         ui.add(egui::Slider::new(&mut el.x, 0.0..=1.0).text("X"));
@@ -297,12 +348,11 @@ impl MyApp {
                         self.telemetry_laps.clear();
                         let mut current_lap = None;
                         for s in &log.samples {
-                            if let Some(lap) = s.lap_number {
-                                if Some(lap) != current_lap {
+                            if let Some(lap) = s.lap_number
+                                && Some(lap) != current_lap {
                                     current_lap = Some(lap);
                                     self.telemetry_laps.push((lap, s.time_ms));
                                 }
-                            }
                         }
 
                         self.trackmap = TrackMap::from_telemetry(&log, &self.telemetry_laps);
@@ -312,17 +362,34 @@ impl MyApp {
                 DialogMode::PickExportOutput => {
                     let config_clone = self.config.clone();
                     let telem_clone = if let Some(t) = &self.telemetry {
-                        TelemetryLog { samples: t.samples.clone(), start_time_utc: t.start_time_utc }
+                        TelemetryLog {
+                            samples: t.samples.clone(),
+                            start_time_utc: t.start_time_utc,
+                        }
                     } else {
-                        TelemetryLog { samples: vec![], start_time_utc: None }
+                        TelemetryLog {
+                            samples: vec![],
+                            start_time_utc: None,
+                        }
                     };
 
                     self.export_progress = Some(format!("Exporting to {:?}...", path_buf));
 
-                    match export_video(&config_clone, &telem_clone, &path_buf) {
-                        Ok(_) => self.export_progress = Some("Export completed successfully.".to_string()),
-                        Err(e) => self.export_progress = Some(format!("Export failed: {}", e)),
-                    }
+                    let progress_arc =
+                        Arc::new(Mutex::new(track_overlay::export::ExportProgress::default()));
+                    self.active_export_progress = Some(progress_arc.clone());
+                    let path_clone = path_buf.clone();
+                    let tx = self.export_tx.clone();
+                    std::thread::spawn(move || {
+                        let res = track_overlay::export::export_video(
+                            &config_clone,
+                            &telem_clone,
+                            &path_clone,
+                            Some(progress_arc),
+                        );
+                        let _ = tx.send(res);
+                    });
+                    self.export_progress = Some("Exporting in background...".to_string());
                 }
                 DialogMode::None => {}
             }
@@ -337,7 +404,11 @@ impl MyApp {
             let controls_height = 40.0;
             available_video_area.set_bottom(rect.bottom() - controls_height);
 
-            ui.painter().rect_filled(available_video_area, 0.0, egui::Color32::from_rgb(20, 20, 20));
+            ui.painter().rect_filled(
+                available_video_area,
+                0.0,
+                egui::Color32::from_rgb(20, 20, 20),
+            );
 
             // Fetch frame from video player
             if let Some(player) = &mut self.video_player {
@@ -353,10 +424,7 @@ impl MyApp {
                     let h = frame.height as usize;
 
                     if w > 0 && h > 0 {
-                        let image = egui::ColorImage::from_rgba_unmultiplied(
-                            [w, h],
-                            &frame.data,
-                        );
+                        let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &frame.data);
 
                         let texture = ui.ctx().load_texture(
                             "video_frame",
@@ -390,14 +458,10 @@ impl MyApp {
                 let mut max_pos = egui::pos2(1.0, 1.0);
 
                 if self.config.flip_horizontal {
-                    let tmp = min_pos.x;
-                    min_pos.x = max_pos.x;
-                    max_pos.x = tmp;
+                    std::mem::swap(&mut min_pos.x, &mut max_pos.x);
                 }
                 if self.config.flip_vertical {
-                    let tmp = min_pos.y;
-                    min_pos.y = max_pos.y;
-                    max_pos.y = tmp;
+                    std::mem::swap(&mut min_pos.y, &mut max_pos.y);
                 }
 
                 ui.painter().image(
@@ -408,12 +472,20 @@ impl MyApp {
                 );
             }
 
-            let sample = self.telemetry.as_ref().and_then(|log| {
-                log.sample_at(self.playhead_ms + self.config.sync.offset_ms)
-            });
+            let sample = self
+                .telemetry
+                .as_ref()
+                .and_then(|log| log.sample_at(self.playhead_ms + self.config.sync.offset_ms));
 
             // Bind the telemetry overlay rendering entirely to the draw_rect of the video stream
-            render_overlay(ui, draw_rect, &mut self.config.elements, sample.as_ref(), self.trackmap.as_ref(), false);
+            render_overlay(
+                ui,
+                draw_rect,
+                &mut self.config.elements,
+                sample.as_ref(),
+                self.trackmap.as_ref(),
+                false,
+            );
 
             let mut control_rect = rect;
             control_rect.set_top(rect.bottom() - controls_height);
@@ -425,16 +497,21 @@ impl MyApp {
 
             ui.scope_builder(egui::UiBuilder::new().max_rect(centered_controls), |ui| {
                 ui.horizontal(|ui| {
-                    let btn_text = if self.is_playing { "⏸ Pause" } else { "▶ Play" };
+                    let btn_text = if self.is_playing { "Pause" } else { "Play" };
                     if ui.button(btn_text).clicked() {
                         self.is_playing = !self.is_playing;
                     }
 
-                    ui.label(format!("{} / {}", Self::format_time(self.playhead_ms), Self::format_time(self.video_duration_ms)));
+                    ui.label(format!(
+                        "{} / {}",
+                        Self::format_time(self.playhead_ms),
+                        Self::format_time(self.video_duration_ms)
+                    ));
 
-                    let slider = egui::Slider::new(&mut self.playhead_ms, 0..=self.video_duration_ms)
-                        .show_value(false)
-                        .trailing_fill(true);
+                    let slider =
+                        egui::Slider::new(&mut self.playhead_ms, 0..=self.video_duration_ms)
+                            .show_value(false)
+                            .trailing_fill(true);
                     ui.add_sized(ui.available_size(), slider);
                 });
             });
@@ -444,6 +521,20 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Ok(res) = self.export_rx.try_recv() {
+            self.active_export_progress = None;
+            match res {
+                Ok(_) => self.export_progress = Some("Export completed successfully.".to_string()),
+                Err(e) => self.export_progress = Some(format!("Export failed: {}", e)),
+            }
+        }
+        if let Some(arc) = &self.active_export_progress {
+            if let Ok(lock) = arc.lock() {
+                let text = format!("Exporting: {} / {}", lock.frames_done, lock.total_frames);
+                self.export_progress = Some(text);
+            }
+            ctx.request_repaint();
+        }
         if self.is_playing {
             let dt = ctx.input(|i| i.stable_dt);
             self.playhead_ms += (dt * 1000.0) as i64;

@@ -45,10 +45,18 @@ impl TrackMap {
             let x = ((s.lon - lon_ref).to_radians() * lat_ref_rad.cos() * EARTH_RADIUS_M) as f32;
             let y = ((s.lat - lat_ref).to_radians() * EARTH_RADIUS_M) as f32;
 
-            if x < min_x { min_x = x; }
-            if x > max_x { max_x = x; }
-            if y < min_y { min_y = y; }
-            if y > max_y { max_y = y; }
+            if x < min_x {
+                min_x = x;
+            }
+            if x > max_x {
+                max_x = x;
+            }
+            if y < min_y {
+                min_y = y;
+            }
+            if y > max_y {
+                max_y = y;
+            }
 
             projected.push((x, y));
         }
@@ -56,7 +64,11 @@ impl TrackMap {
         // Normalization (maintain aspect ratio)
         let width = max_x - min_x;
         let height = max_y - min_y;
-        let scale = if width > height { 1.0 / width } else { 1.0 / height };
+        let scale = if width > height {
+            1.0 / width
+        } else {
+            1.0 / height
+        };
 
         let offset_x = -min_x;
         let offset_y = -min_y;
@@ -67,8 +79,18 @@ impl TrackMap {
 
         for (i, (x, y)) in projected.into_iter().enumerate() {
             // center the shorter axis
-            let nx = (x + offset_x) * scale + if height > width { (1.0 - width * scale) / 2.0 } else { 0.0 };
-            let ny = (y + offset_y) * scale + if width > height { (1.0 - height * scale) / 2.0 } else { 0.0 };
+            let nx = (x + offset_x) * scale
+                + if height > width {
+                    (1.0 - width * scale) / 2.0
+                } else {
+                    0.0
+                };
+            let ny = (y + offset_y) * scale
+                + if width > height {
+                    (1.0 - height * scale) / 2.0
+                } else {
+                    0.0
+                };
 
             outline.push((nx, 1.0 - ny)); // Invert Y so North is Up on screen
             times_ms.push(log.samples[i].time_ms);
@@ -108,7 +130,7 @@ impl TrackMap {
 
                     sf_line = (
                         (p.0 - px * width_fraction, p.1 - py * width_fraction),
-                        (p.0 + px * width_fraction, p.1 + py * width_fraction)
+                        (p.0 + px * width_fraction, p.1 + py * width_fraction),
                     );
                     break;
                 }
@@ -125,7 +147,9 @@ impl TrackMap {
     /// Calculates exactly where on the polyline this specific time falls.
     /// This guarantees perfectly smooth dots that don't jitter off the line.
     pub fn point_at_time(&self, time_ms: i64) -> Option<(f32, f32)> {
-        if self.times_ms.is_empty() { return None; }
+        if self.times_ms.is_empty() {
+            return None;
+        }
 
         match self.times_ms.binary_search(&time_ms) {
             Ok(idx) => Some(self.outline[idx]),
@@ -141,12 +165,13 @@ impl TrackMap {
                     let p2 = self.outline[idx];
 
                     let dt = (t2 - t1) as f64;
-                    let t = if dt > 0.0 { ((time_ms - t1) as f64 / dt) as f32 } else { 0.0 };
+                    let t = if dt > 0.0 {
+                        ((time_ms - t1) as f64 / dt) as f32
+                    } else {
+                        0.0
+                    };
 
-                    Some((
-                        p1.0 + (p2.0 - p1.0) * t,
-                        p1.1 + (p2.1 - p1.1) * t
-                    ))
+                    Some((p1.0 + (p2.0 - p1.0) * t, p1.1 + (p2.1 - p1.1) * t))
                 }
             }
         }
