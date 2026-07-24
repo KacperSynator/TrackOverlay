@@ -3,21 +3,6 @@ use tempfile::NamedTempFile;
 use track_overlay::project::{OverlayElement, OverlayKind, ProjectConfig, SyncMode, SyncState};
 
 #[test]
-fn test_default_config_serialization() {
-    let config = ProjectConfig::default();
-
-    // Test serialization
-    let json = serde_json::to_string(&config).expect("Failed to serialize default config");
-
-    // Test deserialization
-    let loaded_config: ProjectConfig =
-        serde_json::from_str(&json).expect("Failed to deserialize default config");
-
-    // Verify equality
-    assert_eq!(config, loaded_config);
-}
-
-#[test]
 fn test_custom_config_serialization() {
     let config = ProjectConfig {
         video_path: PathBuf::from("/path/to/video.mp4"),

@@ -18,14 +18,13 @@ pub struct OverlayElement {
     pub scale: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SyncMode {
-    #[default]
     Manual,
     Auto,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SyncState {
     pub offset_ms: i64,
     pub mode: SyncMode,
@@ -37,54 +36,8 @@ pub struct ProjectConfig {
     pub telemetry_path: PathBuf,
     pub sync: SyncState,
     pub elements: Vec<OverlayElement>,
-    #[serde(default)]
     pub flip_vertical: bool,
-    #[serde(default)]
     pub flip_horizontal: bool,
-}
-
-impl Default for ProjectConfig {
-    fn default() -> Self {
-        Self {
-            video_path: PathBuf::new(),
-            telemetry_path: PathBuf::new(),
-            sync: SyncState::default(),
-            flip_vertical: false,
-            flip_horizontal: false,
-            elements: vec![
-                OverlayElement {
-                    kind: OverlayKind::SpeedReadout,
-                    x: 0.1,
-                    y: 0.8,
-                    scale: 1.0,
-                },
-                OverlayElement {
-                    kind: OverlayKind::GForceMeter,
-                    x: 0.5,
-                    y: 0.8,
-                    scale: 1.0,
-                },
-                OverlayElement {
-                    kind: OverlayKind::LapTimer,
-                    x: 0.8,
-                    y: 0.1,
-                    scale: 1.0,
-                },
-                OverlayElement {
-                    kind: OverlayKind::TrackMap,
-                    x: 0.8,
-                    y: 0.8,
-                    scale: 1.0,
-                },
-                OverlayElement {
-                    kind: OverlayKind::ThrottleBar,
-                    x: 0.3,
-                    y: 0.8,
-                    scale: 1.0,
-                },
-            ],
-        }
-    }
 }
 
 impl ProjectConfig {
