@@ -1,0 +1,42 @@
+{
+  "video_path": "",
+  "telemetry_path": "",
+  "sync": {
+    "offset_ms": 0,
+    "mode": "Manual"
+  },
+  "elements": [
+    {
+      "kind": "SpeedReadout",
+      "x": 0.1,
+      "y": 0.8,
+      "scale": 1.0
+    },
+    {
+      "kind": "GForceMeter",
+      "x": 0.5,
+      "y": 0.8,
+      "scale": 1.0
+    },
+    {
+      "kind": "LapTimer",
+      "x": 0.8,
+      "y": 0.1,
+      "scale": 1.0
+    },
+    {
+      "kind": "TrackMap",
+      "x": 0.8,
+      "y": 0.8,
+      "scale": 1.0
+    },
+    {
+      "kind": "ThrottleBar",
+      "x": 0.3,
+      "y": 0.8,
+      "scale": 1.0
+    }
+  ],
+  "flip_vertical": false,
+  "flip_horizontal": false
+}

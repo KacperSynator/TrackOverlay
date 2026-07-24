@@ -22,16 +22,17 @@ Alternatively, you can run the app using **Docker** without installing dependenc
 
 ## Running the App Natively
 
-To launch the `eframe` GUI for syncing your footage and telemetry, simply use:
+To launch the app (either GUI or CLI), you must provide a required configuration file via the `--config` flag.
+A default layout configuration is provided in the repository as `default_config.json`.
 
 ```bash
-RUST_LOG=info cargo run --release
+RUST_LOG=info cargo run --release -- --config default_config.json
 ```
 
 You can optionally specify a default directory for loading/saving files using the `--data-dir` argument:
 
 ```bash
-RUST_LOG=info cargo run --release -- --data-dir /path/to/my/videos
+RUST_LOG=info cargo run --release -- --config default_config.json --data-dir /path/to/my/videos
 ```
 
 Currently, in GUI mode, you can:
@@ -43,10 +44,10 @@ Currently, in GUI mode, you can:
 
 ## Exporting via CLI
 
-If you've already configured your `ProjectConfig` (e.g. by saving it in the GUI or crafting it manually), you can run the batch export pipeline by providing an export flag and destination via the CLI interface.
+If you've already configured your project (e.g. by saving it in the GUI or crafting it manually), you can run the batch export pipeline by providing an export flag and destination via the CLI interface.
 
 ```bash
-RUST_LOG=info cargo run --release -- --export final_output.mp4 --project my_project.json
+RUST_LOG=info cargo run --release -- --export final_output.mp4 --config my_project.json
 ```
 
 > Note: The export feature wraps around the `ffmpeg` tool.
@@ -77,7 +78,7 @@ docker run --rm \
   -e RUST_LOG=info \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v $(pwd)/data:/app/data \
-  track-overlay --data-dir /app/data
+  track-overlay --config /app/data/default_config.json --data-dir /app/data
 ```
 
 #### 2. GPU Accelerated Mode (Radeon/AMD, Intel)
@@ -94,7 +95,7 @@ docker run --rm \
   -e RUST_LOG=info \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v $(pwd)/data:/app/data \
-  track-overlay --data-dir /app/data
+  track-overlay --config /app/data/default_config.json --data-dir /app/data
 ```
 
 **For Wayland (e.g., Cachy OS default):**
@@ -106,7 +107,7 @@ docker run --rm \
   -e RUST_LOG=info \
   -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
   -v $(pwd)/data:/app/data \
-  track-overlay --data-dir /app/data
+  track-overlay --config /app/data/default_config.json --data-dir /app/data
 ```
 
 #### 3. Export Mode (CLI - No GUI required)
@@ -117,7 +118,7 @@ docker run --rm \
   --device /dev/dri \
   -e RUST_LOG=info \
   -v $(pwd)/data:/app/data \
-  track-overlay --export /app/data/final_output.mp4 --project /app/data/my_project.json
+  track-overlay --export /app/data/final_output.mp4 --config /app/data/my_project.json
 ```
 
 *(Note: NVIDIA GPUs require the proprietary `nvidia-container-toolkit` and the `--gpus all` flag instead of `/dev/dri`. The provided Dockerfile uses Mesa drivers, so NVIDIA users will fallback to software decoding unless the image is adapted for CUDA).*

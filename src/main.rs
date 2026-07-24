@@ -22,7 +22,7 @@ struct Args {
     export: Option<PathBuf>,
 
     #[arg(short, long)]
-    project: Option<PathBuf>,
+    config: PathBuf,
 
     #[arg(short, long, env = "DATA_DIR")]
     data_dir: Option<PathBuf>,
@@ -34,15 +34,17 @@ fn main() -> eframe::Result {
 
     let args = Args::parse();
 
+    info!("Loading config from {:?}", args.config);
+    let config = match ProjectConfig::load(&args.config) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to load config file {:?}: {}", args.config, e);
+            std::process::exit(1);
+        }
+    };
+
     if let Some(output_path) = args.export {
         info!("Export mode requested...");
-
-        let config = if let Some(proj_path) = args.project {
-            info!("Loading project config from {:?}", proj_path);
-            ProjectConfig::load(proj_path).unwrap_or_default()
-        } else {
-            ProjectConfig::default()
-        };
 
         let telemetry = if config.telemetry_path.exists() {
             info!("Loading telemetry from {:?}", config.telemetry_path);
@@ -78,7 +80,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Track Overlay",
         options,
-        Box::new(|_cc| Ok(Box::new(MyApp::new(args.data_dir)))),
+        Box::new(|_cc| Ok(Box::new(MyApp::new(config, args.data_dir)))),
     )
 }
 
@@ -113,7 +115,7 @@ enum DialogMode {
 }
 
 impl MyApp {
-    fn new(data_dir: Option<PathBuf>) -> Self {
+    fn new(config: ProjectConfig, data_dir: Option<PathBuf>) -> Self {
         let mut fd = FileDialog::new().default_size([600.0, 400.0]);
 
         if let Some(ref dir) = data_dir {
@@ -121,7 +123,7 @@ impl MyApp {
         }
 
         Self {
-            config: ProjectConfig::default(),
+            config,
             telemetry: None,
             trackmap: None,
             playhead_ms: 0,
