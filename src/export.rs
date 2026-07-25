@@ -86,6 +86,8 @@ pub fn export_video(
     let mut rgba_frame = ffmpeg::frame::Video::empty();
     let mut yuv_frame = ffmpeg::frame::Video::empty();
 
+    let trackmap = crate::trackmap::TrackMap::from_telemetry(telemetry, &telemetry.extract_laps());
+
     let total_frames = if input_stream.frames() > 0 {
         input_stream.frames() as usize
     } else {
@@ -123,10 +125,27 @@ pub fn export_video(
 
                 let mut packed_data = vec![0u8; (w * h * 4) as usize];
                 for y in 0..h as usize {
-                    let src_start = y * stride;
+                    let src_y = if config.flip_vertical {
+                        (h as usize - 1) - y
+                    } else {
+                        y
+                    };
+
+                    let src_start = src_y * stride;
                     let dst_start = y * (w * 4) as usize;
-                    packed_data[dst_start..dst_start + (w * 4) as usize]
-                        .copy_from_slice(&raw_data[src_start..src_start + (w * 4) as usize]);
+
+                    if config.flip_horizontal {
+                        for x in 0..w as usize {
+                            let src_x = (w as usize - 1) - x;
+                            let src_idx = src_start + src_x * 4;
+                            let dst_idx = dst_start + x * 4;
+                            packed_data[dst_idx..dst_idx + 4]
+                                .copy_from_slice(&raw_data[src_idx..src_idx + 4]);
+                        }
+                    } else {
+                        packed_data[dst_start..dst_start + (w * 4) as usize]
+                            .copy_from_slice(&raw_data[src_start..src_start + (w * 4) as usize]);
+                    }
                 }
 
                 if let Some(mut pixmap) = tiny_skia::PixmapMut::from_bytes(&mut packed_data, w, h) {
@@ -138,7 +157,7 @@ pub fn export_video(
                         &mut pixmap,
                         &config.elements,
                         sample.as_ref(),
-                        None,
+                        trackmap.as_ref(),
                     );
                 }
 

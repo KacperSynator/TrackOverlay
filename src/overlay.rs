@@ -167,9 +167,10 @@ pub fn render_overlay_skia(
     let width = pixmap.width() as f32;
     let height = pixmap.height() as f32;
 
-    let font_data =
-        std::fs::read("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf").unwrap_or_default();
-    let font_opt = Font::try_from_vec(font_data);
+    let res_scale = height / 720.0;
+
+    let font_data = include_bytes!("font.ttf");
+    let font_opt = Font::try_from_bytes(font_data as &[u8]);
 
     for el in elements.iter() {
         let center_x = el.x * width;
@@ -185,7 +186,7 @@ pub fn render_overlay_skia(
                         &text,
                         center_x,
                         center_y,
-                        32.0 * el.scale,
+                        32.0 * el.scale * res_scale    ,
                         Color::WHITE,
                     );
                 } else {
@@ -193,20 +194,20 @@ pub fn render_overlay_skia(
                         pixmap,
                         center_x,
                         center_y,
-                        100.0 * el.scale,
-                        30.0 * el.scale,
+                        100.0 * el.scale * res_scale  ,
+                        30.0 * el.scale * res_scale,
                         Color::WHITE,
                     );
                 }
             }
             OverlayKind::GForceMeter => {
-                let radius = 40.0 * el.scale;
+                let radius = 40.0 * el.scale * res_scale  ;
 
                 let mut paint = Paint::default();
                 paint.set_color_rgba8(255, 255, 255, 255);
                 paint.anti_alias = true;
 
-                let stroke = Stroke { width: 2.0 * el.scale, ..Default::default() };
+                let stroke = Stroke { width: 2.0 * el.scale * res_scale  , ..Default::default() };
 
                 if let Some(path) = PathBuilder::from_circle(center_x, center_y, radius) {
                     pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
@@ -218,7 +219,7 @@ pub fn render_overlay_skia(
                 paint_red.anti_alias = true;
 
                 if let Some(path) =
-                    PathBuilder::from_circle(center_x + dx, center_y + dy, 5.0 * el.scale)
+                    PathBuilder::from_circle(center_x + dx, center_y + dy, 5.0 * el.scale * res_scale  )
                 {
                     pixmap.fill_path(
                         &path,
@@ -238,7 +239,7 @@ pub fn render_overlay_skia(
                         &text,
                         center_x,
                         center_y,
-                        24.0 * el.scale,
+                        24.0 * el.scale * res_scale    ,
                         Color::from_rgba8(255, 255, 0, 255),
                     );
                 } else {
@@ -246,15 +247,15 @@ pub fn render_overlay_skia(
                         pixmap,
                         center_x,
                         center_y,
-                        100.0 * el.scale,
-                        20.0 * el.scale,
+                        100.0 * el.scale * res_scale  ,
+                        20.0 * el.scale * res_scale  ,
                         Color::from_rgba8(255, 255, 0, 255),
                     );
                 }
             }
             OverlayKind::TrackMap => {
                 if let Some(map) = trackmap {
-                    let map_size = 150.0 * el.scale;
+                    let map_size = 150.0 * el.scale * res_scale  ;
                     let left = center_x - map_size / 2.0;
                     let top = center_y - map_size / 2.0;
 
@@ -277,7 +278,7 @@ pub fn render_overlay_skia(
                         paint.set_color_rgba8(255, 255, 255, 150);
                         paint.anti_alias = true;
 
-                        let stroke = Stroke { width: 2.0 * el.scale, ..Default::default() };
+                        let stroke = Stroke { width: 2.0 * el.scale * res_scale  , ..Default::default() };
 
                         pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
                     }
@@ -297,7 +298,7 @@ pub fn render_overlay_skia(
                             let mut paint = Paint::default();
                             paint.set_color_rgba8(0, 255, 0, 255);
                             paint.anti_alias = true;
-                            let stroke = Stroke { width: 3.0 * el.scale, ..Default::default() };
+                            let stroke = Stroke { width: 3.0 * el.scale * res_scale  , ..Default::default() };
                             pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
                         }
 
@@ -307,7 +308,7 @@ pub fn render_overlay_skia(
                         paint.set_color_rgba8(0, 255, 0, 255);
                         paint.anti_alias = true;
 
-                        if let Some(path) = PathBuilder::from_circle(mid_x, mid_y, 3.0 * el.scale) {
+                        if let Some(path) = PathBuilder::from_circle(mid_x, mid_y, 3.0 * el.scale * res_scale  ) {
                             pixmap.fill_path(
                                 &path,
                                 &paint,
@@ -328,7 +329,7 @@ pub fn render_overlay_skia(
                             paint.anti_alias = true;
 
                             if let Some(path) =
-                                PathBuilder::from_circle(dot_x, dot_y, 4.0 * el.scale)
+                                PathBuilder::from_circle(dot_x, dot_y, 4.0 * el.scale * res_scale  )
                             {
                                 pixmap.fill_path(
                                     &path,
@@ -344,8 +345,8 @@ pub fn render_overlay_skia(
             OverlayKind::ThrottleBar => {
                 let throttle = get_throttle_ratio(sample);
 
-                let w = 20.0 * el.scale;
-                let max_h = 100.0 * el.scale;
+                let w = 20.0 * el.scale * res_scale  ;
+                let max_h = 100.0 * el.scale * res_scale  ;
 
                 let left = center_x - w / 2.0;
                 let top = center_y - max_h / 2.0;
