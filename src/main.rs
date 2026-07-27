@@ -270,18 +270,20 @@ impl MyApp {
                                 if let Ok(gps_data) = extract_gopro_gps(&video_path)
                                     && let Some(offset) =
                                         auto_correlate_gps(&gps_data, &telem_clone)
-                                        && let Ok(mut lock) = progress.lock() {
-                                            *lock = Some(offset);
-                                        }
+                                    && let Ok(mut lock) = progress.lock()
+                                {
+                                    *lock = Some(offset);
+                                }
                             });
                         }
                     } else {
                         let mut done = false;
                         if let Ok(lock) = self.auto_sync_progress.as_ref().unwrap().lock()
-                            && let Some(offset) = *lock {
-                                self.config.sync.offset_ms = offset;
-                                done = true;
-                            }
+                            && let Some(offset) = *lock
+                        {
+                            self.config.sync.offset_ms = offset;
+                            done = true;
+                        }
                         if done {
                             self.auto_sync_progress = None;
                         } else {
@@ -351,10 +353,11 @@ impl MyApp {
                         let mut current_lap = None;
                         for s in &log.samples {
                             if let Some(lap) = s.lap_number
-                                && Some(lap) != current_lap {
-                                    current_lap = Some(lap);
-                                    self.telemetry_laps.push((lap, s.time_ms));
-                                }
+                                && Some(lap) != current_lap
+                            {
+                                current_lap = Some(lap);
+                                self.telemetry_laps.push((lap, s.time_ms));
+                            }
                         }
 
                         self.trackmap = TrackMap::from_telemetry(&log, &self.telemetry_laps);
