@@ -90,7 +90,6 @@ struct MyApp {
     playhead_ms: i64,
     is_playing: bool,
     auto_sync_progress: Option<Arc<Mutex<Option<i64>>>>,
-    data_dir: Option<PathBuf>,
     export_progress: Option<String>,
     active_export_progress: Option<Arc<Mutex<track_overlay::export::ExportProgress>>>,
     export_rx: crossbeam_channel::Receiver<anyhow::Result<()>>,
@@ -131,7 +130,6 @@ impl MyApp {
             playhead_ms: 0,
             is_playing: false,
             auto_sync_progress: None,
-            data_dir,
             export_progress: None,
             active_export_progress: None,
             export_rx: rx,
@@ -153,8 +151,10 @@ impl MyApp {
         format!("{:02}:{:02}", minutes, seconds)
     }
 
-    fn build_ui(&mut self, ctx: &egui::Context) {
-        egui::Window::new("Controls").show(ctx, |ui| {
+    fn build_ui(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+
+        egui::Window::new("Controls").show(&ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("Project Files");
 
@@ -328,7 +328,7 @@ impl MyApp {
         });
 
         // Update the file dialog
-        self.file_dialog.update(ctx);
+        self.file_dialog.update(&ctx);
 
         // Check if a file was picked
         if let Some(path) = self.file_dialog.take_picked() {
@@ -401,7 +401,7 @@ impl MyApp {
             self.dialog_mode = DialogMode::None;
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             let rect = ui.available_rect_before_wrap();
             let mut available_video_area = rect;
 
@@ -525,7 +525,9 @@ impl MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+
         if let Ok(res) = self.export_rx.try_recv() {
             self.active_export_progress = None;
             match res {
@@ -550,10 +552,6 @@ impl eframe::App for MyApp {
             ctx.request_repaint();
         }
 
-        self.build_ui(ctx);
-    }
-
-    fn ui(&mut self, _ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // Not used, ui logic handled inside update() manually
+        self.build_ui(ui);
     }
 }
