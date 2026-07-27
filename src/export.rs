@@ -39,6 +39,7 @@ pub fn export_video(
     let width = decoder.width();
     let height = decoder.height();
     let time_base = input_stream.time_base();
+    let frame_rate = input_stream.rate();
 
     let temp_path = output_path.with_extension("temp.mp4");
     let mut output_ctx = ffmpeg::format::output(&temp_path)?;
@@ -55,8 +56,11 @@ pub fn export_video(
     encoder_ctx_video.set_height(height);
     encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
     encoder_ctx_video.set_time_base(time_base);
+    encoder_ctx_video.set_frame_rate(Some(frame_rate));
 
-    let mut encoder = encoder_ctx_video.open_as(encoder)?;
+    let mut opts = ffmpeg::Dictionary::new();
+    opts.set("preset", "medium");
+    let mut encoder = encoder_ctx_video.open_as_with(encoder, opts)?;
 
     output_stream.set_parameters(&encoder);
 
@@ -176,6 +180,7 @@ pub fn export_video(
                 let mut encoded = ffmpeg::Packet::empty();
                 while encoder.receive_packet(&mut encoded).is_ok() {
                     encoded.set_stream(0);
+                    encoded.rescale_ts(time_base, output_ctx.stream(0).unwrap().time_base());
                     encoded.write_interleaved(&mut output_ctx)?;
                 }
             }
@@ -233,6 +238,7 @@ pub fn export_video(
         let mut encoded = ffmpeg::Packet::empty();
         while encoder.receive_packet(&mut encoded).is_ok() {
             encoded.set_stream(0);
+            encoded.rescale_ts(time_base, output_ctx.stream(0).unwrap().time_base());
             encoded.write_interleaved(&mut output_ctx)?;
         }
     }
@@ -241,6 +247,7 @@ pub fn export_video(
     let mut encoded = ffmpeg::Packet::empty();
     while encoder.receive_packet(&mut encoded).is_ok() {
         encoded.set_stream(0);
+        encoded.rescale_ts(time_base, output_ctx.stream(0).unwrap().time_base());
         encoded.write_interleaved(&mut output_ctx)?;
     }
 
