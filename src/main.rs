@@ -151,10 +151,8 @@ impl MyApp {
         format!("{:02}:{:02}", minutes, seconds)
     }
 
-    fn build_ui(&mut self, ui: &mut egui::Ui) {
-        let ctx = ui.ctx().clone();
-
-        egui::Window::new("Controls").show(&ctx, |ui| {
+    fn render_controls_window(&mut self, ctx: &egui::Context) {
+        egui::Window::new("Controls").show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("Project Files");
 
@@ -326,9 +324,11 @@ impl MyApp {
                 }
             });
         });
+    }
 
+    fn handle_dialogs(&mut self, ctx: &egui::Context) {
         // Update the file dialog
-        self.file_dialog.update(&ctx);
+        self.file_dialog.update(ctx);
 
         // Check if a file was picked
         if let Some(path) = self.file_dialog.take_picked() {
@@ -400,7 +400,9 @@ impl MyApp {
             }
             self.dialog_mode = DialogMode::None;
         }
+    }
 
+    fn render_video_panel(&mut self, ui: &mut egui::Ui) {
         egui::CentralPanel::default().show_inside(ui, |ui| {
             let rect = ui.available_rect_before_wrap();
             let mut available_video_area = rect;
@@ -521,6 +523,14 @@ impl MyApp {
                 });
             });
         });
+    }
+
+    fn build_ui(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+
+        self.render_controls_window(&ctx);
+        self.handle_dialogs(&ctx);
+        self.render_video_panel(ui);
     }
 }
 
