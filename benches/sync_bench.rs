@@ -34,10 +34,12 @@ fn generate_circular_track(
     points
 }
 
-fn generate_data(num_laps: u32) -> (Vec<(i64, f64, f64)>, TelemetryLog) {
+/// 100-lap synthetic circular track, used to stress-test many laps at once.
+fn generate_lap_data(num_laps: u32) -> (Vec<(i64, f64, f64)>, TelemetryLog) {
     let center_lat = 53.0;
     let center_lon = 18.0;
     let radius = 0.001;
+
     let mut telem_samples = Vec::new();
     let mut time = 0;
     for lap in 1..=num_laps {
@@ -52,6 +54,7 @@ fn generate_data(num_laps: u32) -> (Vec<(i64, f64, f64)>, TelemetryLog) {
         samples: telem_samples,
         start_time_utc: None,
     };
+
     let gopro_offset = -5000;
     let mut gopro_data = Vec::new();
     let mut g_time = -gopro_offset;
@@ -62,14 +65,62 @@ fn generate_data(num_laps: u32) -> (Vec<(i64, f64, f64)>, TelemetryLog) {
         }
         g_time += 10000;
     }
+
     (gopro_data, telemetry_data)
 }
 
-fn bench_sync(c: &mut Criterion) {
-    let (gopro_data, telemetry_data) = generate_data(100);
+/// 12 minutes of a Lissajous-curve track at 10Hz, with a fixed GoPro offset,
+/// and `lap_number: None` throughout to exercise the fallback path.
+fn generate_lissajous_data() -> (Vec<(i64, f64, f64)>, TelemetryLog) {
+    let duration_ms = 12 * 60 * 1000;
+    let hz = 10;
+    let dt = 1000 / hz;
 
+    let mut samples = Vec::new();
+    for time_ms in (0..duration_ms).step_by(dt as usize) {
+        let t = time_ms as f64 / 1000.0;
+        let lat = 45.0 + (t / 100.0).sin() * 0.01;
+        let lon = 10.0 + (t / 50.0).cos() * 0.01;
+
+        samples.push(TelemetrySample {
+            time_ms,
+            speed_kph: 100.0,
+            lat,
+            lon,
+            accel_lat_g: 0.0,
+            accel_lon_g: 0.0,
+            lap_number: None, // Ensure fallback is triggered
+            lap_time_ms: None,
+            throttle_pct: 100.0,
+        });
+    }
+
+    let telemetry = TelemetryLog {
+        samples,
+        start_time_utc: None,
+    };
+
+    let target_offset = 54300; // 54.3 seconds
+    let mut gopro_gps = Vec::new();
+    for time_ms in (0..duration_ms).step_by(dt as usize) {
+        let t = (time_ms + target_offset) as f64 / 1000.0;
+        let lat = 45.0 + (t / 100.0).sin() * 0.01;
+        let lon = 10.0 + (t / 50.0).cos() * 0.01;
+        gopro_gps.push((time_ms, lat, lon));
+    }
+
+    (gopro_gps, telemetry)
+}
+
+fn bench_sync(c: &mut Criterion) {
+    let (gopro_data, telemetry_data) = generate_lap_data(100);
     c.bench_function("auto_correlate_gps_100_laps", |b| {
         b.iter(|| auto_correlate_gps(&gopro_data, &telemetry_data))
+    });
+
+    let (gopro_gps, telemetry) = generate_lissajous_data();
+    c.bench_function("auto_correlate_gps_lissajous_12min", |b| {
+        b.iter(|| auto_correlate_gps(&gopro_gps, &telemetry))
     });
 }
 
