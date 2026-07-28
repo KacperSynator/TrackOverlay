@@ -77,13 +77,25 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
 
                         // Count how many GoPro crossings align with telemetry crossings using this offset
                         let mut matches = 0;
+                        let mut telem_idx = 0;
                         for &g_check in &gopro_crossings {
                             let mapped_time = g_check + potential_offset;
-                            if telem_laps
-                                .iter()
-                                .any(|&(_, t)| (t - mapped_time).abs() <= tolerance_ms)
+                            // Advance telem_idx as long as the telemetry time is behind the mapped_time minus tolerance
+                            while telem_idx < telem_laps.len()
+                                && telem_laps[telem_idx].1 < mapped_time - tolerance_ms
+                            {
+                                telem_idx += 1;
+                            }
+
+                            // If the current telemetry time is within tolerance, we found a match
+                            if telem_idx < telem_laps.len()
+                                && telem_laps[telem_idx].1 <= mapped_time + tolerance_ms
                             {
                                 matches += 1;
+                                // We can increment telem_idx since we matched it, or let it match multiple if they overlap
+                                // It's safer to not consume it entirely in case of very close crossings, but since
+                                // lap times are usually far apart, consuming it is fine. For now we just let the next
+                                // iteration evaluate it again or move past it.
                             }
                         }
 
