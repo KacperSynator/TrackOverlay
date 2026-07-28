@@ -155,8 +155,12 @@ fn auto_correlate_gps_fallback(
     let telem_start = telem_dist.first().unwrap().0;
     let telem_end = telem_dist.last().unwrap().0;
 
-    // We try offsets from -120000ms to 120000ms (2 minutes)
-    for offset_ms in (-120000..=120000).step_by(100) {
+    // We try offsets from -300000ms to 300000ms (5 minutes)
+    // Coarse search first to find the approximate best offset quickly
+    let mut coarse_best_offset = 0;
+    let mut coarse_min_error = f64::MAX;
+
+    for offset_ms in (-300000..=300000).step_by(1000) {
         let mut error = 0.0;
         let mut count = 0;
 
@@ -176,9 +180,42 @@ fn auto_correlate_gps_fallback(
         if count > gopro_dist.len() / 4 {
             // Need at least 25% overlap
             error /= count as f64;
-            if error < min_error {
-                min_error = error;
-                best_offset = offset_ms;
+            if error < coarse_min_error {
+                coarse_min_error = error;
+                coarse_best_offset = offset_ms;
+            }
+        }
+    }
+
+    // Fine search around the coarse best offset
+    if coarse_min_error != f64::MAX {
+        let fine_start = coarse_best_offset - 1000;
+        let fine_end = coarse_best_offset + 1000;
+
+        for offset_ms in (fine_start..=fine_end).step_by(10) {
+            let mut error = 0.0;
+            let mut count = 0;
+
+            for &(gt, gd) in &gopro_dist {
+                let t_target = gt + offset_ms;
+                if t_target >= telem_start && t_target <= telem_end {
+                    let nearest = telem_dist.binary_search_by_key(&t_target, |&(t, _)| t);
+                    let idx = nearest.unwrap_or_else(|e| e);
+                    if idx < telem_dist.len() {
+                        let td = telem_dist[idx].1;
+                        error += (gd - td).powi(2);
+                        count += 1;
+                    }
+                }
+            }
+
+            if count > gopro_dist.len() / 4 {
+                // Need at least 25% overlap
+                error /= count as f64;
+                if error < min_error {
+                    min_error = error;
+                    best_offset = offset_ms;
+                }
             }
         }
     }
