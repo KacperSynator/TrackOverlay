@@ -6,3 +6,4 @@ pub mod sync;
 pub mod telemetry;
 pub mod trackmap;
 pub mod video;
+pub mod video_worker;

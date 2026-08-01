@@ -339,7 +339,10 @@ impl MyApp {
                     self.playhead_ms = 0;
                     self.last_seek_ms = -1;
 
-                    if let Ok(mut player) = VideoPlayer::new(&path_buf, ctx.clone()) {
+                    let repaint_ctx = ctx.clone();
+                    if let Ok(mut player) =
+                        VideoPlayer::new(&path_buf, move || repaint_ctx.request_repaint())
+                    {
                         if let Some(dur) = player.duration_ms() {
                             self.video_duration_ms = dur;
                         }
