@@ -1,3 +1,4 @@
+#![allow(clippy::collapsible_if)]
 use crate::project::ProjectConfig;
 use crate::telemetry::TelemetryLog;
 use anyhow::{Result, anyhow};
@@ -137,11 +138,11 @@ pub fn export_video(
                 if let Some(start_ms) = config.export_start_ms {
                     if (pts_ms as i64) < start_ms {
                         frames_done += 1;
-                        if let Some(p) = &progress
-                            && let Ok(mut lock) = p.lock()
-                        {
-                            lock.frames_done = frames_done;
-                            lock.total_frames = total_frames.max(frames_done);
+                        if let Some(p) = &progress {
+                            if let Ok(mut lock) = p.lock() {
+                                lock.frames_done = frames_done;
+                                lock.total_frames = total_frames.max(frames_done);
+                            }
                         }
                         continue;
                     }
@@ -159,11 +160,11 @@ pub fn export_video(
                 }
 
                 frames_done += 1;
-                if let Some(p) = &progress
-                    && let Ok(mut lock) = p.lock()
-                {
-                    lock.frames_done = frames_done;
-                    lock.total_frames = total_frames.max(frames_done);
+                if let Some(p) = &progress {
+                    if let Ok(mut lock) = p.lock() {
+                        lock.frames_done = frames_done;
+                        lock.total_frames = total_frames.max(frames_done);
+                    }
                 }
 
                 scaler_to_rgba.run(&decoded, &mut rgba_frame)?;
@@ -221,7 +222,10 @@ pub fn export_video(
                 scaler_to_yuv.run(&rgba_frame, &mut yuv_frame)?;
 
                 // Adjust PTS so it starts at 0
-                let adjusted_pts = decoded.pts().unwrap_or(0).saturating_sub(first_pts.unwrap_or(0));
+                let adjusted_pts = decoded
+                    .pts()
+                    .unwrap_or(0)
+                    .saturating_sub(first_pts.unwrap_or(0));
                 yuv_frame.set_pts(Some(adjusted_pts));
                 encoder.send_frame(&yuv_frame)?;
 
@@ -282,7 +286,10 @@ pub fn export_video(
 
         scaler_to_yuv.run(&rgba_frame, &mut yuv_frame)?;
 
-        let adjusted_pts = decoded.pts().unwrap_or(0).saturating_sub(first_pts.unwrap_or(0));
+        let adjusted_pts = decoded
+            .pts()
+            .unwrap_or(0)
+            .saturating_sub(first_pts.unwrap_or(0));
         yuv_frame.set_pts(Some(adjusted_pts));
         encoder.send_frame(&yuv_frame)?;
 
@@ -304,7 +311,11 @@ pub fn export_video(
 
     output_ctx.write_trailer()?;
 
-    let mut args = vec!["-y".to_string(), "-i".to_string(), temp_path.to_str().unwrap_or("").to_string()];
+    let mut args = vec![
+        "-y".to_string(),
+        "-i".to_string(),
+        temp_path.to_str().unwrap_or("").to_string(),
+    ];
 
     // Add start offset for audio from the original video if trimming
     if let Some(start_ms) = config.export_start_ms {
@@ -337,9 +348,7 @@ pub fn export_video(
         output_path.to_str().unwrap_or("output.mp4").to_string(),
     ]);
 
-    let status = std::process::Command::new("ffmpeg")
-        .args(args)
-        .status()?;
+    let status = std::process::Command::new("ffmpeg").args(args).status()?;
 
     if !status.success() {
         std::fs::copy(&temp_path, output_path)?;
