@@ -91,7 +91,26 @@ pub fn export_video(
     let mut rgba_frame = ffmpeg::frame::Video::empty();
     let mut yuv_frame = ffmpeg::frame::Video::empty();
 
-    let trackmap = crate::trackmap::TrackMap::from_telemetry(telemetry, &telemetry.extract_laps());
+    // Filter telemetry to only include the exported time range for the trackmap
+    let filtered_telemetry = if config.export_start_ms.is_some() || config.export_end_ms.is_some() {
+        let start = config.export_start_ms.unwrap_or(0);
+        let end = config.export_end_ms.unwrap_or(i64::MAX);
+        let end = if end < 0 { i64::MAX } else { end };
+
+        let mut t = telemetry.clone();
+        t.samples.retain(|s| {
+            let sync_time = s.time_ms - config.sync.offset_ms;
+            sync_time >= start && sync_time <= end
+        });
+        t
+    } else {
+        telemetry.clone()
+    };
+
+    let trackmap = crate::trackmap::TrackMap::from_telemetry(
+        &filtered_telemetry,
+        &filtered_telemetry.extract_laps(),
+    );
 
     let total_frames = if input_stream.frames() > 0 {
         input_stream.frames() as usize

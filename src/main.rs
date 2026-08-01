@@ -271,7 +271,7 @@ impl MyApp {
                             egui::DragValue::new(&mut start_sec)
                                 .speed(0.1)
                                 .prefix("Start: ")
-                                .custom_parser(|s| parse_time_str(s))
+                                .custom_parser(parse_time_str)
                                 .custom_formatter(|n, _| format_time_str(n)),
                         )
                         .changed()
@@ -295,12 +295,16 @@ impl MyApp {
                             egui::DragValue::new(&mut end_sec)
                                 .speed(0.1)
                                 .prefix("End: ")
-                                .custom_parser(|s| parse_time_str(s))
+                                .custom_parser(parse_time_str)
                                 .custom_formatter(|n, _| format_time_str(n)),
                         )
                         .changed()
                     {
-                        self.config.export_end_ms = Some(if end_sec >= 0.0 { (end_sec * 1000.0) as i64 } else { -1 });
+                        self.config.export_end_ms = Some(if end_sec >= 0.0 {
+                            (end_sec * 1000.0) as i64
+                        } else {
+                            -1
+                        });
                     }
                     if ui.button("Jump").clicked() {
                         if let Some(end_val) = self.config.export_end_ms {
