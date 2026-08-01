@@ -93,3 +93,35 @@ jobs:
         with:
           recreate: true
           path: code-coverage-results.md
+
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'run-ci')
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libavutil-dev libavformat-dev libavcodec-dev libswscale-dev libavdevice-dev libavfilter-dev ffmpeg
+      - name: Install minimal stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run benchmark
+        run: cargo bench --bench sync_bench -- --output-format bencher | tee output.txt
+      - name: Download previous benchmark data
+        uses: actions/cache@v4
+        with:
+          path: ./cache
+          key: ${{ runner.os }}-benchmark-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-benchmark-
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: output.txt
+          external-data-json-path: ./cache/benchmark-data.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-always: true
+          comment-on-alert: true
+          save-data-file: true
