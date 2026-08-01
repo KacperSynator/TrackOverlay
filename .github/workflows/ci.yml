@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
 
 env:
   CARGO_TERM_COLOR: always
@@ -14,7 +14,6 @@ jobs:
   fmt:
     name: Format
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'run-ci')
     steps:
       - uses: actions/checkout@v4.2.2
       - name: Install minimal stable with rustfmt
@@ -27,7 +26,6 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'run-ci')
     steps:
       - uses: actions/checkout@v4.2.2
       - name: Install dependencies
@@ -44,7 +42,6 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'run-ci')
     steps:
       - uses: actions/checkout@v4.2.2
       - name: Install dependencies
@@ -59,7 +56,6 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'run-ci')
     steps:
       - uses: actions/checkout@v4.2.2
       - name: Install dependencies
@@ -97,7 +93,6 @@ jobs:
   benchmark:
     name: Benchmark
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'run-ci')
     steps:
       - uses: actions/checkout@v4.2.2
       - name: Install dependencies
