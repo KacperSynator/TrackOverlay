@@ -114,6 +114,30 @@ enum DialogMode {
     PickExportOutput,
 }
 
+fn parse_time_str(s: &str) -> Option<f64> {
+    let parts: Vec<&str> = s.split(':').collect();
+    if parts.len() == 2 {
+        let m: f64 = parts[0].parse().ok()?;
+        let sec: f64 = parts[1].parse().ok()?;
+        Some(m * 60.0 + sec)
+    } else {
+        s.parse().ok()
+    }
+}
+
+fn format_time_str(seconds: f64) -> String {
+    if seconds < 0.0 {
+        return "-1".to_string();
+    }
+    let m = (seconds / 60.0).floor() as u32;
+    let s = seconds % 60.0;
+    if m > 0 {
+        format!("{m}:{s:05.2}")
+    } else {
+        format!("{s:.2}")
+    }
+}
+
 impl MyApp {
     fn new(config: ProjectConfig, data_dir: Option<PathBuf>) -> Self {
         let (tx, rx) = crossbeam_channel::unbounded();
@@ -241,37 +265,50 @@ impl MyApp {
                 ui.heading("Export Range");
 
                 ui.horizontal(|ui| {
-                    let mut start_val = self.config.export_start_ms.unwrap_or(0);
+                    let mut start_sec = self.config.export_start_ms.unwrap_or(0) as f64 / 1000.0;
                     if ui
                         .add(
-                            egui::DragValue::new(&mut start_val)
-                                .speed(100.0)
-                                .prefix("Start (ms): "),
+                            egui::DragValue::new(&mut start_sec)
+                                .speed(0.1)
+                                .prefix("Start: ")
+                                .custom_parser(|s| parse_time_str(s))
+                                .custom_formatter(|n, _| format_time_str(n)),
                         )
                         .changed()
                     {
-                        self.config.export_start_ms = Some(start_val);
+                        self.config.export_start_ms = Some((start_sec * 1000.0) as i64);
                     }
                     if ui.button("Jump").clicked() {
-                        self.playhead_ms = start_val;
+                        self.playhead_ms = self.config.export_start_ms.unwrap_or(0);
                     }
                 });
 
                 ui.horizontal(|ui| {
-                    let mut end_val = self.config.export_end_ms.unwrap_or(-1);
+                    let mut end_sec = if let Some(ms) = self.config.export_end_ms {
+                        if ms >= 0 { ms as f64 / 1000.0 } else { -1.0 }
+                    } else {
+                        -1.0
+                    };
+
                     if ui
                         .add(
-                            egui::DragValue::new(&mut end_val)
-                                .speed(100.0)
-                                .prefix("End (ms): "),
+                            egui::DragValue::new(&mut end_sec)
+                                .speed(0.1)
+                                .prefix("End: ")
+                                .custom_parser(|s| parse_time_str(s))
+                                .custom_formatter(|n, _| format_time_str(n)),
                         )
                         .changed()
                     {
-                        self.config.export_end_ms = Some(end_val);
+                        self.config.export_end_ms = Some(if end_sec >= 0.0 { (end_sec * 1000.0) as i64 } else { -1 });
                     }
                     if ui.button("Jump").clicked() {
-                        if end_val >= 0 {
-                            self.playhead_ms = end_val;
+                        if let Some(end_val) = self.config.export_end_ms {
+                            if end_val >= 0 {
+                                self.playhead_ms = end_val;
+                            } else {
+                                self.playhead_ms = self.video_duration_ms;
+                            }
                         } else {
                             self.playhead_ms = self.video_duration_ms;
                         }
