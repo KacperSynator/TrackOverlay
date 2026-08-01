@@ -27,6 +27,8 @@ fn test_custom_config_serialization() {
                 scale: 0.8,
             },
         ],
+        export_start_ms: Some(100),
+        export_end_ms: None,
     };
 
     // Test serialization
@@ -57,6 +59,8 @@ fn test_config_save_and_load() {
             y: 0.1,
             scale: 2.0,
         }],
+        export_start_ms: None,
+        export_end_ms: Some(5000),
     };
 
     let temp_file = NamedTempFile::new().expect("Failed to create temp file");

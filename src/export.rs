@@ -1,3 +1,4 @@
+#![allow(clippy::collapsible_if)]
 use crate::project::ProjectConfig;
 use crate::telemetry::TelemetryLog;
 use anyhow::{Result, anyhow};
@@ -90,7 +91,26 @@ pub fn export_video(
     let mut rgba_frame = ffmpeg::frame::Video::empty();
     let mut yuv_frame = ffmpeg::frame::Video::empty();
 
-    let trackmap = crate::trackmap::TrackMap::from_telemetry(telemetry, &telemetry.extract_laps());
+    // Filter telemetry to only include the exported time range for the trackmap
+    let filtered_telemetry = if config.export_start_ms.is_some() || config.export_end_ms.is_some() {
+        let start = config.export_start_ms.unwrap_or(0);
+        let end = config.export_end_ms.unwrap_or(i64::MAX);
+        let end = if end < 0 { i64::MAX } else { end };
+
+        let mut t = telemetry.clone();
+        t.samples.retain(|s| {
+            let sync_time = s.time_ms - config.sync.offset_ms;
+            sync_time >= start && sync_time <= end
+        });
+        t
+    } else {
+        telemetry.clone()
+    };
+
+    let trackmap = crate::trackmap::TrackMap::from_telemetry(
+        &filtered_telemetry,
+        &filtered_telemetry.extract_laps(),
+    );
 
     let total_frames = if input_stream.frames() > 0 {
         input_stream.frames() as usize
@@ -108,17 +128,62 @@ pub fn export_video(
     };
     let mut frames_done = 0;
 
+    if let Some(start_ms) = config.export_start_ms {
+        if start_ms > 0 {
+            // Seek expects timestamps in AV_TIME_BASE (microseconds)
+            let pts = (start_ms as f64 * 1000.0) as i64;
+            input_ctx.seek(pts, ..pts).unwrap_or_else(|e| {
+                eprintln!("Failed to seek to start: {}", e);
+            });
+        }
+    }
+
+    let mut finished = false;
+    let mut first_pts: Option<i64> = None;
+
     for (stream, packet) in input_ctx.packets() {
+        if finished {
+            break;
+        }
+
         if stream.index() == video_stream_index {
             decoder.send_packet(&packet)?;
 
             while decoder.receive_frame(&mut decoded).is_ok() {
+                let pts_ms = decoded.pts().unwrap_or(0) as f64 * time_base.numerator() as f64
+                    / time_base.denominator() as f64
+                    * 1000.0;
+
+                if let Some(start_ms) = config.export_start_ms {
+                    if (pts_ms as i64) < start_ms {
+                        frames_done += 1;
+                        if let Some(p) = &progress {
+                            if let Ok(mut lock) = p.lock() {
+                                lock.frames_done = frames_done;
+                                lock.total_frames = total_frames.max(frames_done);
+                            }
+                        }
+                        continue;
+                    }
+                }
+
+                if let Some(end_ms) = config.export_end_ms {
+                    if end_ms >= 0 && (pts_ms as i64) > end_ms {
+                        finished = true;
+                        break;
+                    }
+                }
+
+                if first_pts.is_none() {
+                    first_pts = Some(decoded.pts().unwrap_or(0));
+                }
+
                 frames_done += 1;
-                if let Some(p) = &progress
-                    && let Ok(mut lock) = p.lock()
-                {
-                    lock.frames_done = frames_done;
-                    lock.total_frames = total_frames.max(frames_done);
+                if let Some(p) = &progress {
+                    if let Ok(mut lock) = p.lock() {
+                        lock.frames_done = frames_done;
+                        lock.total_frames = total_frames.max(frames_done);
+                    }
                 }
 
                 scaler_to_rgba.run(&decoded, &mut rgba_frame)?;
@@ -175,7 +240,12 @@ pub fn export_video(
 
                 scaler_to_yuv.run(&rgba_frame, &mut yuv_frame)?;
 
-                yuv_frame.set_pts(decoded.pts());
+                // Adjust PTS so it starts at 0
+                let adjusted_pts = decoded
+                    .pts()
+                    .unwrap_or(0)
+                    .saturating_sub(first_pts.unwrap_or(0));
+                yuv_frame.set_pts(Some(adjusted_pts));
                 encoder.send_frame(&yuv_frame)?;
 
                 let mut encoded = ffmpeg::Packet::empty();
@@ -234,7 +304,12 @@ pub fn export_video(
         }
 
         scaler_to_yuv.run(&rgba_frame, &mut yuv_frame)?;
-        yuv_frame.set_pts(decoded.pts());
+
+        let adjusted_pts = decoded
+            .pts()
+            .unwrap_or(0)
+            .saturating_sub(first_pts.unwrap_or(0));
+        yuv_frame.set_pts(Some(adjusted_pts));
         encoder.send_frame(&yuv_frame)?;
 
         let mut encoded = ffmpeg::Packet::empty();
@@ -255,24 +330,44 @@ pub fn export_video(
 
     output_ctx.write_trailer()?;
 
-    let status = std::process::Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-i",
-            temp_path.to_str().unwrap_or(""),
-            "-i",
-            &video_path,
-            "-c:v",
-            "copy",
-            "-c:a",
-            "copy",
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0?",
-            output_path.to_str().unwrap_or("output.mp4"),
-        ])
-        .status()?;
+    let mut args = vec![
+        "-y".to_string(),
+        "-i".to_string(),
+        temp_path.to_str().unwrap_or("").to_string(),
+    ];
+
+    // Add start offset for audio from the original video if trimming
+    if let Some(start_ms) = config.export_start_ms {
+        if start_ms > 0 {
+            args.push("-ss".to_string());
+            args.push(format!("{:.3}", start_ms as f64 / 1000.0));
+        }
+    }
+
+    // Output duration is what matters since we trim both inputs appropriately
+    if let Some(end_ms) = config.export_end_ms {
+        let start_ms = config.export_start_ms.unwrap_or(0).max(0);
+        if end_ms >= 0 && end_ms > start_ms {
+            args.push("-t".to_string());
+            args.push(format!("{:.3}", (end_ms - start_ms) as f64 / 1000.0));
+        }
+    }
+
+    args.extend(vec![
+        "-i".to_string(),
+        video_path.to_string(),
+        "-c:v".to_string(),
+        "copy".to_string(),
+        "-c:a".to_string(),
+        "copy".to_string(),
+        "-map".to_string(),
+        "0:v:0".to_string(),
+        "-map".to_string(),
+        "1:a:0?".to_string(),
+        output_path.to_str().unwrap_or("output.mp4").to_string(),
+    ]);
+
+    let status = std::process::Command::new("ffmpeg").args(args).status()?;
 
     if !status.success() {
         std::fs::copy(&temp_path, output_path)?;

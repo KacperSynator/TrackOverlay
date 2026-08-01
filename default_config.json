@@ -38,5 +38,7 @@
     }
   ],
   "flip_vertical": false,
-  "flip_horizontal": false
+  "flip_horizontal": false,
+  "export_start_ms": null,
+  "export_end_ms": null
 }
