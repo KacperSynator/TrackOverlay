@@ -238,6 +238,35 @@ impl MyApp {
                 ui.checkbox(&mut self.config.flip_horizontal, "Flip Video Horizontally");
 
                 ui.separator();
+                ui.heading("Export Range");
+
+                ui.horizontal(|ui| {
+                    let mut start_val = self.config.export_start_ms.unwrap_or(0);
+                    if ui.add(egui::DragValue::new(&mut start_val).speed(100.0).prefix("Start (ms): ")).changed() {
+                        self.config.export_start_ms = Some(start_val);
+                    }
+                    if ui.button("Jump").clicked() {
+                        self.playhead_ms = start_val;
+                    }
+                });
+
+                ui.horizontal(|ui| {
+                    let mut end_val = self.config.export_end_ms.unwrap_or(-1);
+                    if ui.add(egui::DragValue::new(&mut end_val).speed(100.0).prefix("End (ms): ")).changed() {
+                        self.config.export_end_ms = Some(end_val);
+                    }
+                    if ui.button("Jump").clicked() {
+                        if end_val >= 0 {
+                            self.playhead_ms = end_val;
+                        } else {
+                            self.playhead_ms = self.video_duration_ms;
+                        }
+                    }
+                    ui.label("(-1 for end)");
+                });
+
+
+                ui.separator();
                 ui.heading("Sync");
 
                 ui.horizontal(|ui| {

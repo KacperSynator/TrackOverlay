@@ -38,6 +38,10 @@ pub struct ProjectConfig {
     pub elements: Vec<OverlayElement>,
     pub flip_vertical: bool,
     pub flip_horizontal: bool,
+    #[serde(default)]
+    pub export_start_ms: Option<i64>,
+    #[serde(default)]
+    pub export_end_ms: Option<i64>,
 }
 
 impl ProjectConfig {
