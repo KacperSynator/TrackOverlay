@@ -16,18 +16,18 @@ fn test_custom_config_serialization() {
         flip_horizontal: false,
         elements: vec![
             OverlayElement {
+                enabled: true,
                 kind: OverlayKind::SpeedReadout,
                 x: 0.25,
                 y: 0.75,
                 scale: 1.5,
-                enabled: true,
             },
             OverlayElement {
+                enabled: true,
                 kind: OverlayKind::LapTimer,
                 x: 0.9,
                 y: 0.9,
                 scale: 0.8,
-                enabled: true,
             },
         ],
         export_start_ms: Some(100),
@@ -58,11 +58,11 @@ fn test_config_save_and_load() {
         flip_vertical: false,
         flip_horizontal: true,
         elements: vec![OverlayElement {
+            enabled: true,
             kind: OverlayKind::TrackMap,
             x: 0.1,
             y: 0.1,
             scale: 2.0,
-            enabled: true,
         }],
         export_start_ms: None,
         export_end_ms: Some(5000),

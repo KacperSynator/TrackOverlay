@@ -16,12 +16,12 @@ fn default_true() -> bool {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OverlayElement {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     pub kind: OverlayKind,
     pub x: f32,
     pub y: f32,
     pub scale: f32,
-    #[serde(default = "default_true")]
-    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
