@@ -1,4 +1,4 @@
-use crate::overlay::{common, OverlayImpl};
+use crate::overlay::{OverlayImpl, common};
 use crate::project::OverlayElement;
 use crate::telemetry::TelemetrySample;
 use crate::trackmap::TrackMap;
@@ -67,11 +67,9 @@ impl OverlayImpl for GForceMeter {
         paint_red.set_color_rgba8(255, 0, 0, 255);
         paint_red.anti_alias = true;
 
-        if let Some(path) = PathBuilder::from_circle(
-            center_x + dx,
-            center_y + dy,
-            5.0 * el.scale * res_scale,
-        ) {
+        if let Some(path) =
+            PathBuilder::from_circle(center_x + dx, center_y + dy, 5.0 * el.scale * res_scale)
+        {
             pixmap.fill_path(
                 &path,
                 &paint_red,

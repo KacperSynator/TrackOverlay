@@ -24,8 +24,7 @@ impl OverlayImpl for TrackMapOverlay {
 
         if let Some(map) = trackmap {
             let map_size = 150.0 * el.scale;
-            let map_rect =
-                egui::Rect::from_center_size(center, egui::vec2(map_size, map_size));
+            let map_rect = egui::Rect::from_center_size(center, egui::vec2(map_size, map_size));
 
             let mut path = Vec::with_capacity(map.outline.len());
             for &(x, y) in &map.outline {

@@ -1,4 +1,4 @@
-use crate::overlay::{common, OverlayImpl};
+use crate::overlay::{OverlayImpl, common};
 use crate::project::OverlayElement;
 use crate::telemetry::TelemetrySample;
 use crate::trackmap::TrackMap;

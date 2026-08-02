@@ -5,11 +5,11 @@ use eframe::egui;
 use tiny_skia::PixmapMut;
 
 pub mod common;
-pub mod speed_readout;
 pub mod gforce_meter;
 pub mod lap_timer;
-pub mod track_map;
+pub mod speed_readout;
 pub mod throttle_bar;
+pub mod track_map;
 
 pub trait OverlayImpl {
     fn render_ui(
