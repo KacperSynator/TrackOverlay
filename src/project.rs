@@ -10,13 +10,8 @@ pub enum OverlayKind {
     ThrottleBar,
 }
 
-fn default_true() -> bool {
-    true
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OverlayElement {
-    #[serde(default = "default_true")]
     pub enabled: bool,
     pub kind: OverlayKind,
     pub x: f32,
