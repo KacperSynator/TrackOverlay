@@ -4,7 +4,7 @@ use log::{debug, info, warn};
 /// Auto-correlates two GPS traces to find the time offset.
 /// Returns the offset_ms that should be added to the video playhead
 /// to match the telemetry.
-pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLog) -> Option<i64> {
+pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLog, max_sync_offset_ms: i64) -> Option<i64> {
     if gopro_gps.is_empty() || telemetry.samples.is_empty() {
         warn!("Cannot auto-correlate: missing GPS or Telemetry data");
         return None;
@@ -128,12 +128,13 @@ pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLo
     }
 
     // Fallback Strategy: Distance least-squares matching
-    auto_correlate_gps_fallback(gopro_gps, telemetry)
+    auto_correlate_gps_fallback(gopro_gps, telemetry, max_sync_offset_ms)
 }
 
 fn auto_correlate_gps_fallback(
     gopro_gps: &[(i64, f64, f64)],
     telemetry: &TelemetryLog,
+    max_sync_offset_ms: i64,
 ) -> Option<i64> {
     if gopro_gps.is_empty() || telemetry.samples.is_empty() {
         return None;
@@ -159,12 +160,11 @@ fn auto_correlate_gps_fallback(
     let telem_start = telem_dist.first().unwrap().0;
     let telem_end = telem_dist.last().unwrap().0;
 
-    // We try offsets from -300000ms to 300000ms (5 minutes)
     // Coarse search first to find the approximate best offset quickly
     let mut coarse_best_offset = 0;
     let mut coarse_min_error = f64::MAX;
 
-    for offset_ms in (-300000..=300000).step_by(1000) {
+    for offset_ms in (-max_sync_offset_ms..=max_sync_offset_ms).step_by(1000) {
         let mut error = 0.0;
         let mut count = 0;
 

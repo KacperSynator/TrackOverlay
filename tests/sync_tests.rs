@@ -29,9 +29,9 @@ fn test_auto_correlate_empty_data() {
         start_time_utc: None,
     };
 
-    assert_eq!(auto_correlate_gps(&empty_gopro, &empty_telemetry), None);
-    assert_eq!(auto_correlate_gps(&empty_gopro, &one_telemetry), None);
-    assert_eq!(auto_correlate_gps(&one_gopro, &empty_telemetry), None);
+    assert_eq!(auto_correlate_gps(&empty_gopro, &empty_telemetry, 300000), None);
+    assert_eq!(auto_correlate_gps(&empty_gopro, &one_telemetry, 300000), None);
+    assert_eq!(auto_correlate_gps(&one_gopro, &empty_telemetry, 300000), None);
 }
 
 fn generate_circular_track(
@@ -81,7 +81,7 @@ fn test_auto_correlate_lap_based() {
         }
         g_time += 10000;
     }
-    let offset = auto_correlate_gps(&gopro_data, &telemetry_data);
+    let offset = auto_correlate_gps(&gopro_data, &telemetry_data, 300000);
     let found_offset = offset.unwrap();
     assert!((found_offset - gopro_offset).abs() <= 500);
 }
@@ -113,7 +113,7 @@ fn test_auto_correlate_distance_fallback() {
             .unwrap();
         gopro_data_zero.push((g_time, sample.lat, sample.lon));
     }
-    let offset = auto_correlate_gps(&gopro_data_zero, &telemetry_data);
+    let offset = auto_correlate_gps(&gopro_data_zero, &telemetry_data, 300000);
     assert!(offset.is_some());
     assert!((offset.unwrap() - expected_offset_zero).abs() <= 100);
 }
@@ -147,7 +147,7 @@ fn test_auto_correlate_failure() {
         gopro_data.push((g_time, g_lat, 100.0));
     }
 
-    let offset = auto_correlate_gps(&gopro_data, &telemetry_data);
+    let offset = auto_correlate_gps(&gopro_data, &telemetry_data, 300000);
     assert_eq!(
         offset, None,
         "Expected correlation to fail for completely unmatched tracks"
