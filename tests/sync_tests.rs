@@ -22,22 +22,6 @@ fn test_auto_correlate_empty_data() {
         samples: vec![],
         start_time_utc: None,
     };
-    assert_eq!(auto_correlate_gps(&empty_gopro, &empty_telemetry), None);
-}
-
-#[test]
-fn test_auto_correlate_gps_fallback_empty_data() {
-    let empty_gopro: Vec<(i64, f64, f64)> = vec![];
-    let empty_telemetry = TelemetryLog {
-        samples: vec![],
-        start_time_utc: None,
-    };
-    // Testing the fallback directly. Since auto_correlate_gps_fallback isn't public,
-    // we would need to mock a failure in auto_correlate_gps that falls back with empty data.
-    // However, the main function already checks for empty data and returns early,
-    // so it's currently impossible for the fallback to receive empty data organically.
-    // To properly unit test this, the fallback function would need to be visible.
-    // Let's at least try the main function with one empty and one non-empty vector.
 
     let one_gopro = vec![(0, 0.0, 0.0)];
     let one_telemetry = TelemetryLog {
@@ -45,6 +29,7 @@ fn test_auto_correlate_gps_fallback_empty_data() {
         start_time_utc: None,
     };
 
+    assert_eq!(auto_correlate_gps(&empty_gopro, &empty_telemetry), None);
     assert_eq!(auto_correlate_gps(&empty_gopro, &one_telemetry), None);
     assert_eq!(auto_correlate_gps(&one_gopro, &empty_telemetry), None);
 }
