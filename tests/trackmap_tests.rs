@@ -85,3 +85,31 @@ fn test_trackmap_projection() {
     assert!(p1.0 >= 0.0 && p1.0 <= 1.0);
     assert!(p1.1 >= 0.0 && p1.1 <= 1.0);
 }
+
+#[test]
+fn test_trackmap_empty_edge_cases() {
+    let track = TrackMap {
+        outline: vec![],
+        times_ms: vec![],
+        start_finish: ((0.0, 0.0), (0.0, 0.0)),
+    };
+
+    assert_eq!(track.point_at_time(0), None);
+    assert_eq!(track.point_at_time(1000), None);
+
+    let track_empty_times = TrackMap {
+        outline: vec![(0.0, 0.0)],
+        times_ms: vec![],
+        start_finish: ((0.0, 0.0), (0.0, 0.0)),
+    };
+    assert_eq!(track_empty_times.point_at_time(0), None);
+
+    let track_empty_outline = TrackMap {
+        outline: vec![],
+        times_ms: vec![1000],
+        start_finish: ((0.0, 0.0), (0.0, 0.0)),
+    };
+    assert_eq!(track_empty_outline.point_at_time(0), None);
+    assert_eq!(track_empty_outline.point_at_time(1000), None);
+    assert_eq!(track_empty_outline.point_at_time(2000), None);
+}

@@ -147,7 +147,7 @@ impl TrackMap {
     /// Calculates exactly where on the polyline this specific time falls.
     /// This guarantees perfectly smooth dots that don't jitter off the line.
     pub fn point_at_time(&self, time_ms: i64) -> Option<(f32, f32)> {
-        if self.times_ms.is_empty() {
+        if self.times_ms.is_empty() || self.outline.is_empty() {
             return None;
         }
 
@@ -157,7 +157,7 @@ impl TrackMap {
                 if idx == 0 {
                     Some(self.outline[0])
                 } else if idx >= self.times_ms.len() {
-                    Some(*self.outline.last().unwrap())
+                    self.outline.last().copied()
                 } else {
                     let t1 = self.times_ms[idx - 1];
                     let t2 = self.times_ms[idx];
