@@ -10,6 +10,7 @@ fn test_custom_config_serialization() {
         sync: SyncState {
             offset_ms: 1500,
             mode: SyncMode::Auto,
+            max_auto_sync_offset_ms: 300000,
         },
         flip_vertical: true,
         flip_horizontal: false,
@@ -50,6 +51,7 @@ fn test_config_save_and_load() {
         sync: SyncState {
             offset_ms: -500,
             mode: SyncMode::Manual,
+            max_auto_sync_offset_ms: 300000,
         },
         flip_vertical: false,
         flip_horizontal: true,

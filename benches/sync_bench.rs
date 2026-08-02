@@ -113,14 +113,16 @@ fn generate_lissajous_data() -> (Vec<(i64, f64, f64)>, TelemetryLog) {
 }
 
 fn bench_sync(c: &mut Criterion) {
+    let max_auto_sync_offset_ms = 300000;
+
     let (gopro_data, telemetry_data) = generate_lap_data(100);
     c.bench_function("auto_correlate_gps_100_laps", |b| {
-        b.iter(|| auto_correlate_gps(&gopro_data, &telemetry_data))
+        b.iter(|| auto_correlate_gps(&gopro_data, &telemetry_data, max_auto_sync_offset_ms))
     });
 
     let (gopro_gps, telemetry) = generate_lissajous_data();
     c.bench_function("auto_correlate_gps_lissajous_12min", |b| {
-        b.iter(|| auto_correlate_gps(&gopro_gps, &telemetry))
+        b.iter(|| auto_correlate_gps(&gopro_gps, &telemetry, max_auto_sync_offset_ms))
     });
 }
 

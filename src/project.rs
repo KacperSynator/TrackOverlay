@@ -28,6 +28,7 @@ pub enum SyncMode {
 pub struct SyncState {
     pub offset_ms: i64,
     pub mode: SyncMode,
+    pub max_auto_sync_offset_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

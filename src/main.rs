@@ -346,11 +346,15 @@ impl MyApp {
                                     start_time_utc: None,
                                 }
                             };
+                            let max_auto_sync_offset_ms = self.config.sync.max_auto_sync_offset_ms;
 
                             thread::spawn(move || {
                                 if let Ok(gps_data) = extract_gopro_gps(&video_path)
-                                    && let Some(offset) =
-                                        auto_correlate_gps(&gps_data, &telem_clone)
+                                    && let Some(offset) = auto_correlate_gps(
+                                        &gps_data,
+                                        &telem_clone,
+                                        max_auto_sync_offset_ms,
+                                    )
                                     && let Ok(mut lock) = progress.lock()
                                 {
                                     *lock = Some(offset);
