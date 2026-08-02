@@ -350,8 +350,11 @@ impl MyApp {
 
                             thread::spawn(move || {
                                 if let Ok(gps_data) = extract_gopro_gps(&video_path)
-                                    && let Some(offset) =
-                                        auto_correlate_gps(&gps_data, &telem_clone, max_sync_offset_ms)
+                                    && let Some(offset) = auto_correlate_gps(
+                                        &gps_data,
+                                        &telem_clone,
+                                        max_sync_offset_ms,
+                                    )
                                     && let Ok(mut lock) = progress.lock()
                                 {
                                     *lock = Some(offset);

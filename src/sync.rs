@@ -4,7 +4,11 @@ use log::{debug, info, warn};
 /// Auto-correlates two GPS traces to find the time offset.
 /// Returns the offset_ms that should be added to the video playhead
 /// to match the telemetry.
-pub fn auto_correlate_gps(gopro_gps: &[(i64, f64, f64)], telemetry: &TelemetryLog, max_sync_offset_ms: i64) -> Option<i64> {
+pub fn auto_correlate_gps(
+    gopro_gps: &[(i64, f64, f64)],
+    telemetry: &TelemetryLog,
+    max_sync_offset_ms: i64,
+) -> Option<i64> {
     if gopro_gps.is_empty() || telemetry.samples.is_empty() {
         warn!("Cannot auto-correlate: missing GPS or Telemetry data");
         return None;

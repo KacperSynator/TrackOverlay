@@ -29,9 +29,18 @@ fn test_auto_correlate_empty_data() {
         start_time_utc: None,
     };
 
-    assert_eq!(auto_correlate_gps(&empty_gopro, &empty_telemetry, 300000), None);
-    assert_eq!(auto_correlate_gps(&empty_gopro, &one_telemetry, 300000), None);
-    assert_eq!(auto_correlate_gps(&one_gopro, &empty_telemetry, 300000), None);
+    assert_eq!(
+        auto_correlate_gps(&empty_gopro, &empty_telemetry, 300000),
+        None
+    );
+    assert_eq!(
+        auto_correlate_gps(&empty_gopro, &one_telemetry, 300000),
+        None
+    );
+    assert_eq!(
+        auto_correlate_gps(&one_gopro, &empty_telemetry, 300000),
+        None
+    );
 }
 
 fn generate_circular_track(
