@@ -83,6 +83,15 @@ jobs:
           badge: true
           format: markdown
           output: both
+          hide_complexity: true
+      - name: Add Coverage PR Comment Legend
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          echo "" >> code-coverage-results.md
+          echo "**Health Indicator Legend:**" >> code-coverage-results.md
+          echo "❌ Below 50% coverage" >> code-coverage-results.md
+          echo "➖ Between 50% and 75% coverage" >> code-coverage-results.md
+          echo "✔️ Above 75% coverage" >> code-coverage-results.md
       - name: Write PR Comment
         uses: marocchino/sticky-pull-request-comment@v2
         if: always() && github.event_name == 'pull_request'
