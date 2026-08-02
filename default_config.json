@@ -11,31 +11,36 @@
       "kind": "SpeedReadout",
       "x": 0.1,
       "y": 0.85,
-      "scale": 1.0
+      "scale": 1.0,
+      "enabled": true
     },
     {
       "kind": "GForceMeter",
       "x": 0.5,
       "y": 0.85,
-      "scale": 1.0
+      "scale": 1.0,
+      "enabled": true
     },
     {
       "kind": "LapTimer",
       "x": 0.1,
       "y": 0.1,
-      "scale": 1.0
+      "scale": 1.0,
+      "enabled": true
     },
     {
       "kind": "TrackMap",
       "x": 0.85,
       "y": 0.2,
-      "scale": 1.0
+      "scale": 1.0,
+      "enabled": true
     },
     {
       "kind": "ThrottleBar",
       "x": 0.2,
       "y": 0.85,
-      "scale": 1.0
+      "scale": 1.0,
+      "enabled": true
     }
   ],
   "flip_vertical": false,
