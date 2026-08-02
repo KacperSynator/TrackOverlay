@@ -7,7 +7,7 @@ use log::{debug, info, warn};
 pub fn auto_correlate_gps(
     gopro_gps: &[(i64, f64, f64)],
     telemetry: &TelemetryLog,
-    max_sync_offset_ms: i64,
+    max_auto_sync_offset_ms: i64,
 ) -> Option<i64> {
     if gopro_gps.is_empty() || telemetry.samples.is_empty() {
         warn!("Cannot auto-correlate: missing GPS or Telemetry data");
@@ -132,13 +132,13 @@ pub fn auto_correlate_gps(
     }
 
     // Fallback Strategy: Distance least-squares matching
-    auto_correlate_gps_fallback(gopro_gps, telemetry, max_sync_offset_ms)
+    auto_correlate_gps_fallback(gopro_gps, telemetry, max_auto_sync_offset_ms)
 }
 
 fn auto_correlate_gps_fallback(
     gopro_gps: &[(i64, f64, f64)],
     telemetry: &TelemetryLog,
-    max_sync_offset_ms: i64,
+    max_auto_sync_offset_ms: i64,
 ) -> Option<i64> {
     if gopro_gps.is_empty() || telemetry.samples.is_empty() {
         return None;
@@ -168,7 +168,7 @@ fn auto_correlate_gps_fallback(
     let mut coarse_best_offset = 0;
     let mut coarse_min_error = f64::MAX;
 
-    for offset_ms in (-max_sync_offset_ms..=max_sync_offset_ms).step_by(1000) {
+    for offset_ms in (-max_auto_sync_offset_ms..=max_auto_sync_offset_ms).step_by(1000) {
         let mut error = 0.0;
         let mut count = 0;
 

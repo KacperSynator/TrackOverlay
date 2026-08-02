@@ -15,6 +15,8 @@ fn create_sample(time_ms: i64, lat: f64, lon: f64, lap_number: Option<u32>) -> T
     }
 }
 
+const MAX_AUTO_SYNC_OFFSET_MS: i64 = 300000;
+
 #[test]
 fn test_auto_correlate_empty_data() {
     let empty_gopro: Vec<(i64, f64, f64)> = vec![];
@@ -30,15 +32,15 @@ fn test_auto_correlate_empty_data() {
     };
 
     assert_eq!(
-        auto_correlate_gps(&empty_gopro, &empty_telemetry, 300000),
+        auto_correlate_gps(&empty_gopro, &empty_telemetry, MAX_AUTO_SYNC_OFFSET_MS),
         None
     );
     assert_eq!(
-        auto_correlate_gps(&empty_gopro, &one_telemetry, 300000),
+        auto_correlate_gps(&empty_gopro, &one_telemetry, MAX_AUTO_SYNC_OFFSET_MS),
         None
     );
     assert_eq!(
-        auto_correlate_gps(&one_gopro, &empty_telemetry, 300000),
+        auto_correlate_gps(&one_gopro, &empty_telemetry, MAX_AUTO_SYNC_OFFSET_MS),
         None
     );
 }
@@ -90,7 +92,7 @@ fn test_auto_correlate_lap_based() {
         }
         g_time += 10000;
     }
-    let offset = auto_correlate_gps(&gopro_data, &telemetry_data, 300000);
+    let offset = auto_correlate_gps(&gopro_data, &telemetry_data, MAX_AUTO_SYNC_OFFSET_MS);
     let found_offset = offset.unwrap();
     assert!((found_offset - gopro_offset).abs() <= 500);
 }
@@ -122,7 +124,7 @@ fn test_auto_correlate_distance_fallback() {
             .unwrap();
         gopro_data_zero.push((g_time, sample.lat, sample.lon));
     }
-    let offset = auto_correlate_gps(&gopro_data_zero, &telemetry_data, 300000);
+    let offset = auto_correlate_gps(&gopro_data_zero, &telemetry_data, MAX_AUTO_SYNC_OFFSET_MS);
     assert!(offset.is_some());
     assert!((offset.unwrap() - expected_offset_zero).abs() <= 100);
 }
@@ -156,7 +158,7 @@ fn test_auto_correlate_failure() {
         gopro_data.push((g_time, g_lat, 100.0));
     }
 
-    let offset = auto_correlate_gps(&gopro_data, &telemetry_data, 300000);
+    let offset = auto_correlate_gps(&gopro_data, &telemetry_data, MAX_AUTO_SYNC_OFFSET_MS);
     assert_eq!(
         offset, None,
         "Expected correlation to fail for completely unmatched tracks"

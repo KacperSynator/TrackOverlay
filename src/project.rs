@@ -24,16 +24,11 @@ pub enum SyncMode {
     Auto,
 }
 
-fn default_max_sync_offset_ms() -> i64 {
-    300000
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SyncState {
     pub offset_ms: i64,
     pub mode: SyncMode,
-    #[serde(default = "default_max_sync_offset_ms")]
-    pub max_sync_offset_ms: i64,
+    pub max_auto_sync_offset_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
