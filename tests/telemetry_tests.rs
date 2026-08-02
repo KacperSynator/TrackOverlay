@@ -39,4 +39,16 @@ fn test_telemetry_parsing_and_interpolation() {
     assert_eq!(interp.time_ms, 50);
     assert_eq!(interp.speed_kph, 27.0);
     assert_eq!(interp.lap_time_ms, Some(50));
+
+    // Test out of bounds (before start)
+    let early = log.sample_at(-1000).unwrap();
+    assert_eq!(early.time_ms, 0);
+    assert_eq!(early.speed_kph, 26.5);
+    assert_eq!(early.lap_time_ms, Some(0));
+
+    // Test out of bounds (after end)
+    let late = log.sample_at(10000).unwrap();
+    assert_eq!(late.time_ms, 100);
+    assert_eq!(late.speed_kph, 27.5);
+    assert_eq!(late.lap_time_ms, Some(100));
 }
