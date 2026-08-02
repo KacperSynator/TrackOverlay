@@ -87,6 +87,7 @@ jobs:
       - name: Add Coverage PR Comment Legend
         if: always() && github.event_name == 'pull_request'
         run: |
+          sudo chown $USER:$USER code-coverage-results.md
           echo "" >> code-coverage-results.md
           echo "**Health Indicator Legend:**" >> code-coverage-results.md
           echo "❌ Below 50% coverage" >> code-coverage-results.md
