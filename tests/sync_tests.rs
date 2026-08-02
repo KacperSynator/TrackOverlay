@@ -22,7 +22,16 @@ fn test_auto_correlate_empty_data() {
         samples: vec![],
         start_time_utc: None,
     };
+
+    let one_gopro = vec![(0, 0.0, 0.0)];
+    let one_telemetry = TelemetryLog {
+        samples: vec![create_sample(0, 0.0, 0.0, None)],
+        start_time_utc: None,
+    };
+
     assert_eq!(auto_correlate_gps(&empty_gopro, &empty_telemetry), None);
+    assert_eq!(auto_correlate_gps(&empty_gopro, &one_telemetry), None);
+    assert_eq!(auto_correlate_gps(&one_gopro, &empty_telemetry), None);
 }
 
 fn generate_circular_track(

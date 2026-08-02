@@ -135,6 +135,10 @@ fn auto_correlate_gps_fallback(
     gopro_gps: &[(i64, f64, f64)],
     telemetry: &TelemetryLog,
 ) -> Option<i64> {
+    if gopro_gps.is_empty() || telemetry.samples.is_empty() {
+        return None;
+    }
+
     let mut gopro_dist = Vec::new();
     let (t0, lat0, lon0) = gopro_gps[0];
     for &(t, lat, lon) in gopro_gps {
