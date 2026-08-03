@@ -7,15 +7,12 @@ A desktop app that overlays TrackAddict CSV telemetry (speed, g-force, lap time,
 If you plan to run the app natively on your machine, you need:
 
 - Rust toolchain (stable)
-- GStreamer development libraries
-- FFmpeg (for final video export)
+- FFmpeg development libraries (for video decoding and export)
 
 **Ubuntu/Debian setup:**
 ```bash
 sudo apt-get update
-sudo apt-get install -y libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
-sudo apt-get install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
-sudo apt-get install -y ffmpeg
+sudo apt-get install -y pkg-config libavutil-dev libavformat-dev libavcodec-dev libswscale-dev libavdevice-dev libavfilter-dev ffmpeg
 ```
 
 Alternatively, you can run the app using **Docker** without installing dependencies natively (see Docker instructions below).
@@ -128,6 +125,6 @@ docker run --rm \
 - GUI: `egui` via `eframe`
 - File Picker: `egui-file-dialog` (Cross-platform, embedded inside egui window)
 - Telemetry parsing: `csv` + `serde`
-- Video playback/decoding: `gstreamer-rs`
+- Video playback/decoding: `ffmpeg-next`
 - Sync Strategy: GPMF extraction via `ffprobe` + cross-correlation
 - Video rendering: FFmpeg (CLI)
