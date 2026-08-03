@@ -22,8 +22,8 @@ pub fn extract_gopro_gps(video_path: &str) -> Result<Vec<(i64, f64, f64)>> {
 
     let output_str = String::from_utf8_lossy(&probe.stdout);
 
-    let stream_idx = parse_ffprobe_output(&output_str)
-        .ok_or_else(|| anyhow!("No GPMD stream found in MP4"))?;
+    let stream_idx =
+        parse_ffprobe_output(&output_str).ok_or_else(|| anyhow!("No GPMD stream found in MP4"))?;
 
     // 2. Dump stream data using ffmpeg to a temporary file
     let temp_gpmf = tempfile::NamedTempFile::new()?;
@@ -195,7 +195,10 @@ mod tests {
         data.extend_from_slice(&0i32.to_be_bytes()); // speed
 
         let points = parse_gps5_data(&data);
-        assert!(points.is_empty(), "Points with lat=0, lon=0 should be ignored");
+        assert!(
+            points.is_empty(),
+            "Points with lat=0, lon=0 should be ignored"
+        );
     }
 
     #[test]
@@ -207,10 +210,13 @@ mod tests {
         data.push(15); // item_size (too small)
         data.extend_from_slice(&1u16.to_be_bytes()); // item_count (1 item)
 
-        data.extend_from_slice(&vec![0; 15]); // Pad with 15 bytes
+        data.extend_from_slice(&[0; 15]); // Pad with 15 bytes
 
         let points = parse_gps5_data(&data);
-        assert!(points.is_empty(), "Should ignore blocks with item_size < 16");
+        assert!(
+            points.is_empty(),
+            "Should ignore blocks with item_size < 16"
+        );
     }
 
     #[test]
@@ -229,6 +235,9 @@ mod tests {
         data.extend_from_slice(&0i32.to_be_bytes()); // speed
 
         let points = parse_gps5_data(&data);
-        assert!(points.is_empty(), "Should ignore incomplete blocks where data_start + data_len > raw_data.len()");
+        assert!(
+            points.is_empty(),
+            "Should ignore incomplete blocks where data_start + data_len > raw_data.len()"
+        );
     }
 }
