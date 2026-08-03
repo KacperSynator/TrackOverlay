@@ -12,6 +12,7 @@ pub enum OverlayKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OverlayElement {
+    pub enabled: bool,
     pub kind: OverlayKind,
     pub x: f32,
     pub y: f32,

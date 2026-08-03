@@ -392,7 +392,7 @@ impl MyApp {
                 ui.label("Layout Editor");
                 for el in self.config.elements.iter_mut() {
                     ui.horizontal(|ui| {
-                        ui.label(format!("{:?}", el.kind));
+                        ui.checkbox(&mut el.enabled, format!("{:?}", el.kind));
                         ui.add(egui::Slider::new(&mut el.x, 0.0..=1.0).text("X"));
                         ui.add(egui::Slider::new(&mut el.y, 0.0..=1.0).text("Y"));
                         ui.add(egui::Slider::new(&mut el.scale, 0.5..=3.0).text("Scale"));
