@@ -125,3 +125,112 @@ pub fn draw_text(
         }
     }
 }
+
+#[cfg(test)]
+pub fn create_test_sample() -> TelemetrySample {
+    TelemetrySample {
+        time_ms: 1000,
+        speed_kph: 120.5,
+        lat: 10.0,
+        lon: 20.0,
+        accel_lat_g: 1.5,
+        accel_lon_g: -0.5,
+        lap_number: Some(2),
+        lap_time_ms: Some(150500),
+        throttle_pct: 75.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusttype::Font;
+    use tiny_skia::{Color, PixmapMut};
+
+    #[test]
+    fn test_get_speed_text() {
+        assert_eq!(get_speed_text(None), "0 km/h");
+        let sample = create_test_sample();
+        assert_eq!(get_speed_text(Some(&sample)), "120 km/h"); // format!("{:.0} km/h", speed)
+    }
+
+    #[test]
+    fn test_get_gforce_dot() {
+        assert_eq!(get_gforce_dot(None, 40.0), (0.0, -0.0));
+        let sample = create_test_sample();
+        // lat_g = 1.5, lon_g = -0.5
+        // (lat_g * radius, -lon_g * radius)
+        assert_eq!(
+            get_gforce_dot(Some(&sample), 40.0),
+            (1.5 * 40.0, -(-0.5) * 40.0)
+        );
+    }
+
+    #[test]
+    fn test_get_lap_timer_text() {
+        assert_eq!(get_lap_timer_text(None), "00:00.00");
+        let sample = create_test_sample();
+        // 150500 ms -> 150.5 s -> 2 mins, 30.5 secs
+        assert_eq!(get_lap_timer_text(Some(&sample)), "02:30.50");
+    }
+
+    #[test]
+    fn test_get_throttle_ratio() {
+        assert_eq!(get_throttle_ratio(None), 0.0);
+        let sample = create_test_sample();
+        assert_eq!(get_throttle_ratio(Some(&sample)), 0.75);
+
+        let mut clamped_sample = create_test_sample();
+        clamped_sample.throttle_pct = 150.0;
+        assert_eq!(get_throttle_ratio(Some(&clamped_sample)), 1.0);
+
+        clamped_sample.throttle_pct = -50.0;
+        assert_eq!(get_throttle_ratio(Some(&clamped_sample)), 0.0);
+    }
+
+    #[test]
+    fn test_draw_text_fallback() {
+        let mut data = vec![0; 100 * 100 * 4];
+        let mut pixmap = PixmapMut::from_bytes(&mut data, 100, 100).unwrap();
+        draw_text_fallback(
+            &mut pixmap,
+            50.0,
+            50.0,
+            20.0,
+            20.0,
+            Color::from_rgba8(255, 0, 0, 255),
+        );
+        // Ensure no panic
+    }
+
+    #[test]
+    fn test_draw_text() {
+        let font_data = include_bytes!("../font.ttf");
+        let font = Font::try_from_bytes(font_data as &[u8]).unwrap();
+
+        let mut data = vec![0; 100 * 100 * 4];
+        let mut pixmap = PixmapMut::from_bytes(&mut data, 100, 100).unwrap();
+
+        draw_text(
+            &mut pixmap,
+            &font,
+            "TEST",
+            50.0,
+            50.0,
+            20.0,
+            Color::from_rgba8(0, 255, 0, 255),
+        );
+        // Ensure no panic
+
+        // Edge case: Empty text
+        draw_text(
+            &mut pixmap,
+            &font,
+            "",
+            50.0,
+            50.0,
+            20.0,
+            Color::from_rgba8(0, 255, 0, 255),
+        );
+    }
+}

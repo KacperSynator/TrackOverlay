@@ -97,3 +97,49 @@ impl OverlayImpl for ThrottleBar {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use eframe::egui;
+
+    fn create_test_element() -> OverlayElement {
+        OverlayElement {
+            enabled: true,
+            kind: crate::project::OverlayKind::ThrottleBar,
+            x: 0.5,
+            y: 0.5,
+            scale: 1.0,
+        }
+    }
+
+    #[test]
+    fn test_throttle_bar_render_skia() {
+        let el = create_test_element();
+        let mut data = vec![0; 800 * 600 * 4];
+        let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
+
+        let bar = ThrottleBar;
+        bar.render_skia(&mut pixmap, &el, None, None);
+
+        let sample = crate::overlay::common::create_test_sample();
+        bar.render_skia(&mut pixmap, &el, Some(&sample), None);
+    }
+
+    #[test]
+    fn test_throttle_bar_render_ui() {
+        let el = create_test_element();
+        let ctx = egui::Context::default();
+        let _ = ctx.run_ui(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show_inside(ctx, |ui| {
+                let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+
+                let bar = ThrottleBar;
+                bar.render_ui(ui, rect, &el, None, None);
+
+                let sample = crate::overlay::common::create_test_sample();
+                bar.render_ui(ui, rect, &el, Some(&sample), None);
+            });
+        });
+    }
+}
