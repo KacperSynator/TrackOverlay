@@ -86,13 +86,27 @@ mod tests {
     use super::*;
     use eframe::egui;
 
-    fn create_test_element() -> OverlayElement {
+    pub fn create_test_element() -> OverlayElement {
         OverlayElement {
             enabled: true,
             kind: crate::project::OverlayKind::GForceMeter,
             x: 0.5,
             y: 0.5,
             scale: 1.0,
+        }
+    }
+
+    pub fn create_test_sample() -> TelemetrySample {
+        TelemetrySample {
+            time_ms: 1000,
+            speed_kph: 120.5,
+            lat: 10.0,
+            lon: 20.0,
+            accel_lat_g: 1.5,
+            accel_lon_g: -0.5,
+            lap_number: Some(2),
+            lap_time_ms: Some(150500),
+            throttle_pct: 75.0,
         }
     }
 
@@ -105,17 +119,7 @@ mod tests {
         let meter = GForceMeter;
         meter.render_skia(&mut pixmap, &el, None, None);
 
-        let sample = TelemetrySample {
-            time_ms: 1000,
-            speed_kph: 120.5,
-            lat: 10.0,
-            lon: 20.0,
-            accel_lat_g: 1.5,
-            accel_lon_g: -0.5,
-            lap_number: Some(2),
-            lap_time_ms: Some(150500),
-            throttle_pct: 75.0,
-        };
+        let sample = create_test_sample();
         meter.render_skia(&mut pixmap, &el, Some(&sample), None);
     }
 
@@ -130,17 +134,7 @@ mod tests {
                 let meter = GForceMeter;
                 meter.render_ui(ui, rect, &el, None, None);
 
-                let sample = TelemetrySample {
-                    time_ms: 1000,
-                    speed_kph: 120.5,
-                    lat: 10.0,
-                    lon: 20.0,
-                    accel_lat_g: 1.5,
-                    accel_lon_g: -0.5,
-                    lap_number: Some(2),
-                    lap_time_ms: Some(150500),
-                    throttle_pct: 75.0,
-                };
+                let sample = create_test_sample();
                 meter.render_ui(ui, rect, &el, Some(&sample), None);
             });
         });

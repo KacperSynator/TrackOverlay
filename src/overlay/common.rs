@@ -127,37 +127,37 @@ pub fn draw_text(
 }
 
 #[cfg(test)]
+pub fn create_test_sample() -> TelemetrySample {
+    TelemetrySample {
+        time_ms: 1000,
+        speed_kph: 120.5,
+        lat: 10.0,
+        lon: 20.0,
+        accel_lat_g: 1.5,
+        accel_lon_g: -0.5,
+        lap_number: Some(2),
+        lap_time_ms: Some(150500),
+        throttle_pct: 75.0,
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::telemetry::TelemetrySample;
     use rusttype::Font;
     use tiny_skia::{Color, PixmapMut};
-
-    fn create_sample() -> TelemetrySample {
-        TelemetrySample {
-            time_ms: 1000,
-            speed_kph: 120.5,
-            lat: 10.0,
-            lon: 20.0,
-            accel_lat_g: 1.5,
-            accel_lon_g: -0.5,
-            lap_number: Some(2),
-            lap_time_ms: Some(150500),
-            throttle_pct: 75.0,
-        }
-    }
 
     #[test]
     fn test_get_speed_text() {
         assert_eq!(get_speed_text(None), "0 km/h");
-        let sample = create_sample();
+        let sample = create_test_sample();
         assert_eq!(get_speed_text(Some(&sample)), "120 km/h"); // format!("{:.0} km/h", speed)
     }
 
     #[test]
     fn test_get_gforce_dot() {
         assert_eq!(get_gforce_dot(None, 40.0), (0.0, -0.0));
-        let sample = create_sample();
+        let sample = create_test_sample();
         // lat_g = 1.5, lon_g = -0.5
         // (lat_g * radius, -lon_g * radius)
         assert_eq!(
@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn test_get_lap_timer_text() {
         assert_eq!(get_lap_timer_text(None), "00:00.00");
-        let sample = create_sample();
+        let sample = create_test_sample();
         // 150500 ms -> 150.5 s -> 2 mins, 30.5 secs
         assert_eq!(get_lap_timer_text(Some(&sample)), "02:30.50");
     }
@@ -177,10 +177,10 @@ mod tests {
     #[test]
     fn test_get_throttle_ratio() {
         assert_eq!(get_throttle_ratio(None), 0.0);
-        let sample = create_sample();
+        let sample = create_test_sample();
         assert_eq!(get_throttle_ratio(Some(&sample)), 0.75);
 
-        let mut clamped_sample = create_sample();
+        let mut clamped_sample = create_test_sample();
         clamped_sample.throttle_pct = 150.0;
         assert_eq!(get_throttle_ratio(Some(&clamped_sample)), 1.0);
 

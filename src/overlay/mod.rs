@@ -74,12 +74,8 @@ mod tests {
     use super::*;
     use eframe::egui;
 
-    #[test]
-    fn test_render_overlay_skia() {
-        let mut data = vec![0; 800 * 600 * 4];
-        let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
-
-        let elements = vec![
+    pub fn create_test_elements() -> Vec<OverlayElement> {
+        vec![
             OverlayElement {
                 enabled: true,
                 kind: OverlayKind::SpeedReadout,
@@ -94,29 +90,22 @@ mod tests {
                 y: 0.5,
                 scale: 1.0,
             },
-        ];
+        ]
+    }
+
+    #[test]
+    fn test_render_overlay_skia() {
+        let mut data = vec![0; 800 * 600 * 4];
+        let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
+
+        let elements = create_test_elements();
 
         render_overlay_skia(&mut pixmap, &elements, None, None);
     }
 
     #[test]
     fn test_render_overlay_ui() {
-        let mut elements = vec![
-            OverlayElement {
-                enabled: true,
-                kind: OverlayKind::SpeedReadout,
-                x: 0.5,
-                y: 0.5,
-                scale: 1.0,
-            },
-            OverlayElement {
-                enabled: false,
-                kind: OverlayKind::GForceMeter,
-                x: 0.5,
-                y: 0.5,
-                scale: 1.0,
-            },
-        ];
+        let mut elements = create_test_elements();
 
         let ctx = egui::Context::default();
         let _ = ctx.run_ui(egui::RawInput::default(), |ctx| {

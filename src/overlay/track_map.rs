@@ -218,17 +218,7 @@ mod tests {
         trackmap_overlay.render_skia(&mut pixmap, &el, None, Some(&map));
         trackmap_overlay.render_skia(&mut pixmap, &el, None, None); // no map
 
-        let sample = TelemetrySample {
-            time_ms: 1000,
-            speed_kph: 120.5,
-            lat: 10.0,
-            lon: 20.0,
-            accel_lat_g: 1.5,
-            accel_lon_g: -0.5,
-            lap_number: Some(2),
-            lap_time_ms: Some(150500),
-            throttle_pct: 75.0,
-        };
+        let sample = crate::overlay::common::create_test_sample();
         trackmap_overlay.render_skia(&mut pixmap, &el, Some(&sample), Some(&map));
     }
 
@@ -245,17 +235,7 @@ mod tests {
                 trackmap_overlay.render_ui(ui, rect, &el, None, Some(&map));
                 trackmap_overlay.render_ui(ui, rect, &el, None, None);
 
-                let sample = TelemetrySample {
-                    time_ms: 1000,
-                    speed_kph: 120.5,
-                    lat: 10.0,
-                    lon: 20.0,
-                    accel_lat_g: 1.5,
-                    accel_lon_g: -0.5,
-                    lap_number: Some(2),
-                    lap_time_ms: Some(150500),
-                    throttle_pct: 75.0,
-                };
+        let sample = crate::overlay::common::create_test_sample();
                 trackmap_overlay.render_ui(ui, rect, &el, Some(&sample), Some(&map));
             });
         });

@@ -122,17 +122,7 @@ mod tests {
         let bar = ThrottleBar;
         bar.render_skia(&mut pixmap, &el, None, None);
 
-        let sample = TelemetrySample {
-            time_ms: 1000,
-            speed_kph: 120.5,
-            lat: 10.0,
-            lon: 20.0,
-            accel_lat_g: 1.5,
-            accel_lon_g: -0.5,
-            lap_number: Some(2),
-            lap_time_ms: Some(150500),
-            throttle_pct: 75.0,
-        };
+        let sample = crate::overlay::common::create_test_sample();
         bar.render_skia(&mut pixmap, &el, Some(&sample), None);
     }
 
@@ -147,17 +137,7 @@ mod tests {
                 let bar = ThrottleBar;
                 bar.render_ui(ui, rect, &el, None, None);
 
-                let sample = TelemetrySample {
-                    time_ms: 1000,
-                    speed_kph: 120.5,
-                    lat: 10.0,
-                    lon: 20.0,
-                    accel_lat_g: 1.5,
-                    accel_lon_g: -0.5,
-                    lap_number: Some(2),
-                    lap_time_ms: Some(150500),
-                    throttle_pct: 75.0,
-                };
+        let sample = crate::overlay::common::create_test_sample();
                 bar.render_ui(ui, rect, &el, Some(&sample), None);
             });
         });
