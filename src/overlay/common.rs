@@ -130,8 +130,8 @@ pub fn draw_text(
 mod tests {
     use super::*;
     use crate::telemetry::TelemetrySample;
-    use tiny_skia::{Color, PixmapMut};
     use rusttype::Font;
+    use tiny_skia::{Color, PixmapMut};
 
     fn create_sample() -> TelemetrySample {
         TelemetrySample {
@@ -160,7 +160,10 @@ mod tests {
         let sample = create_sample();
         // lat_g = 1.5, lon_g = -0.5
         // (lat_g * radius, -lon_g * radius)
-        assert_eq!(get_gforce_dot(Some(&sample), 40.0), (1.5 * 40.0, -(-0.5) * 40.0));
+        assert_eq!(
+            get_gforce_dot(Some(&sample), 40.0),
+            (1.5 * 40.0, -(-0.5) * 40.0)
+        );
     }
 
     #[test]
