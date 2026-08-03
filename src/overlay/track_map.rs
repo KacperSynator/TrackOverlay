@@ -183,3 +183,81 @@ impl OverlayImpl for TrackMapOverlay {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use eframe::egui;
+
+    fn create_test_element() -> OverlayElement {
+        OverlayElement {
+            enabled: true,
+            kind: crate::project::OverlayKind::TrackMap,
+            x: 0.5,
+            y: 0.5,
+            scale: 1.0,
+        }
+    }
+
+    fn create_track_map() -> TrackMap {
+        TrackMap {
+            outline: vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            times_ms: vec![0, 1000, 2000, 3000],
+            start_finish: ((0.0, 0.0), (0.1, 0.1)),
+        }
+    }
+
+    #[test]
+    fn test_track_map_render_skia() {
+        let el = create_test_element();
+        let mut data = vec![0; 800 * 600 * 4];
+        let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
+
+        let map = create_track_map();
+        let trackmap_overlay = TrackMapOverlay;
+        trackmap_overlay.render_skia(&mut pixmap, &el, None, Some(&map));
+        trackmap_overlay.render_skia(&mut pixmap, &el, None, None); // no map
+
+        let sample = TelemetrySample {
+            time_ms: 1000,
+            speed_kph: 120.5,
+            lat: 10.0,
+            lon: 20.0,
+            accel_lat_g: 1.5,
+            accel_lon_g: -0.5,
+            lap_number: Some(2),
+            lap_time_ms: Some(150500),
+            throttle_pct: 75.0,
+        };
+        trackmap_overlay.render_skia(&mut pixmap, &el, Some(&sample), Some(&map));
+    }
+
+    #[test]
+    fn test_track_map_render_ui() {
+        let el = create_test_element();
+        let map = create_track_map();
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+
+                let trackmap_overlay = TrackMapOverlay;
+                trackmap_overlay.render_ui(ui, rect, &el, None, Some(&map));
+                trackmap_overlay.render_ui(ui, rect, &el, None, None);
+
+                let sample = TelemetrySample {
+                    time_ms: 1000,
+                    speed_kph: 120.5,
+                    lat: 10.0,
+                    lon: 20.0,
+                    accel_lat_g: 1.5,
+                    accel_lon_g: -0.5,
+                    lap_number: Some(2),
+                    lap_time_ms: Some(150500),
+                    throttle_pct: 75.0,
+                };
+                trackmap_overlay.render_ui(ui, rect, &el, Some(&sample), Some(&map));
+            });
+        });
+    }
+}

@@ -73,3 +73,69 @@ impl OverlayImpl for LapTimer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use eframe::egui;
+
+    fn create_test_element() -> OverlayElement {
+        OverlayElement {
+            enabled: true,
+            kind: crate::project::OverlayKind::LapTimer,
+            x: 0.5,
+            y: 0.5,
+            scale: 1.0,
+        }
+    }
+
+    #[test]
+    fn test_lap_timer_render_skia() {
+        let el = create_test_element();
+        let mut data = vec![0; 800 * 600 * 4];
+        let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
+
+        let timer = LapTimer;
+        timer.render_skia(&mut pixmap, &el, None, None);
+
+        let sample = TelemetrySample {
+            time_ms: 1000,
+            speed_kph: 120.5,
+            lat: 10.0,
+            lon: 20.0,
+            accel_lat_g: 1.5,
+            accel_lon_g: -0.5,
+            lap_number: Some(2),
+            lap_time_ms: Some(150500),
+            throttle_pct: 75.0,
+        };
+        timer.render_skia(&mut pixmap, &el, Some(&sample), None);
+    }
+
+    #[test]
+    fn test_lap_timer_render_ui() {
+        let el = create_test_element();
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+
+                let timer = LapTimer;
+                timer.render_ui(ui, rect, &el, None, None);
+
+                let sample = TelemetrySample {
+                    time_ms: 1000,
+                    speed_kph: 120.5,
+                    lat: 10.0,
+                    lon: 20.0,
+                    accel_lat_g: 1.5,
+                    accel_lon_g: -0.5,
+                    lap_number: Some(2),
+                    lap_time_ms: Some(150500),
+                    throttle_pct: 75.0,
+                };
+                timer.render_ui(ui, rect, &el, Some(&sample), None);
+            });
+        });
+    }
+}
