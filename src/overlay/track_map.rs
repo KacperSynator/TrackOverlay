@@ -235,7 +235,7 @@ mod tests {
                 trackmap_overlay.render_ui(ui, rect, &el, None, Some(&map));
                 trackmap_overlay.render_ui(ui, rect, &el, None, None);
 
-        let sample = crate::overlay::common::create_test_sample();
+                let sample = crate::overlay::common::create_test_sample();
                 trackmap_overlay.render_ui(ui, rect, &el, Some(&sample), Some(&map));
             });
         });

@@ -112,7 +112,7 @@ mod tests {
                 let readout = SpeedReadout;
                 readout.render_ui(ui, rect, &el, None, None);
 
-        let sample = crate::overlay::common::create_test_sample();
+                let sample = crate::overlay::common::create_test_sample();
                 readout.render_ui(ui, rect, &el, Some(&sample), None);
             });
         });
