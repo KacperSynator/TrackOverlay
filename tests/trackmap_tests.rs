@@ -15,6 +15,8 @@ fn test_trackmap_projection() {
             lap_number: Some(1),
             lap_time_ms: Some(0),
             throttle_pct: 0.0,
+            session_distance_m: 0.0,
+            lap_distance_m: 0.0,
         },
         TelemetrySample {
             time_ms: 1000,
@@ -26,6 +28,8 @@ fn test_trackmap_projection() {
             lap_number: Some(1),
             lap_time_ms: Some(1000),
             throttle_pct: 0.0,
+            session_distance_m: 0.0,
+            lap_distance_m: 0.0,
         },
         TelemetrySample {
             time_ms: 2000,
@@ -37,6 +41,8 @@ fn test_trackmap_projection() {
             lap_number: Some(1),
             lap_time_ms: Some(2000),
             throttle_pct: 0.0,
+            session_distance_m: 0.0,
+            lap_distance_m: 0.0,
         },
         TelemetrySample {
             time_ms: 3000,
@@ -48,6 +54,8 @@ fn test_trackmap_projection() {
             lap_number: Some(1),
             lap_time_ms: Some(3000),
             throttle_pct: 0.0,
+            session_distance_m: 0.0,
+            lap_distance_m: 0.0,
         },
         TelemetrySample {
             time_ms: 4000,
@@ -59,6 +67,8 @@ fn test_trackmap_projection() {
             lap_number: Some(2),
             lap_time_ms: Some(0),
             throttle_pct: 0.0,
+            session_distance_m: 0.0,
+            lap_distance_m: 0.0,
         },
     ];
 

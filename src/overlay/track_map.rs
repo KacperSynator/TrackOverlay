@@ -1,6 +1,6 @@
 use crate::overlay::OverlayImpl;
 use crate::project::OverlayElement;
-use crate::telemetry::TelemetrySample;
+use crate::telemetry::TelemetryState;
 use crate::trackmap::TrackMap;
 use eframe::egui;
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Stroke, Transform};
@@ -13,7 +13,7 @@ impl OverlayImpl for TrackMapOverlay {
         ui: &mut egui::Ui,
         rect: egui::Rect,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         trackmap: Option<&TrackMap>,
     ) {
         let painter = ui.painter_at(rect);
@@ -60,7 +60,7 @@ impl OverlayImpl for TrackMapOverlay {
                 painter.circle_filled(mid_p, 3.0 * el.scale, egui::Color32::GREEN);
             }
 
-            if let Some(s) = sample
+            if let Some(s) = state.current_sample.as_ref()
                 && let Some((cx, cy)) = map.point_at_time(s.time_ms)
             {
                 let dot_pos = egui::pos2(
@@ -76,7 +76,7 @@ impl OverlayImpl for TrackMapOverlay {
         &self,
         pixmap: &mut PixmapMut,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         trackmap: Option<&TrackMap>,
     ) {
         let width = pixmap.width() as f32;
@@ -158,7 +158,7 @@ impl OverlayImpl for TrackMapOverlay {
                 }
             }
 
-            if let Some(s) = sample
+            if let Some(s) = state.current_sample.as_ref()
                 && let Some((cx, cy)) = map.point_at_time(s.time_ms)
             {
                 let dot_x = left + cx * map_size;
@@ -215,11 +215,41 @@ mod tests {
 
         let map = create_track_map();
         let trackmap_overlay = TrackMapOverlay;
-        trackmap_overlay.render_skia(&mut pixmap, &el, None, Some(&map));
-        trackmap_overlay.render_skia(&mut pixmap, &el, None, None); // no map
+        trackmap_overlay.render_skia(
+            &mut pixmap,
+            &el,
+            &crate::telemetry::TelemetryState {
+                current_sample: None,
+                previous_laps: vec![],
+                best_lap: None,
+                projection_ms: None,
+            },
+            Some(&map),
+        );
+        trackmap_overlay.render_skia(
+            &mut pixmap,
+            &el,
+            &crate::telemetry::TelemetryState {
+                current_sample: None,
+                previous_laps: vec![],
+                best_lap: None,
+                projection_ms: None,
+            },
+            None,
+        ); // no map
 
         let sample = crate::overlay::common::create_test_sample();
-        trackmap_overlay.render_skia(&mut pixmap, &el, Some(&sample), Some(&map));
+        trackmap_overlay.render_skia(
+            &mut pixmap,
+            &el,
+            &crate::telemetry::TelemetryState {
+                current_sample: Some(sample.clone()),
+                previous_laps: vec![],
+                best_lap: None,
+                projection_ms: None,
+            },
+            Some(&map),
+        );
     }
 
     #[test]
@@ -232,11 +262,44 @@ mod tests {
                 let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
 
                 let trackmap_overlay = TrackMapOverlay;
-                trackmap_overlay.render_ui(ui, rect, &el, None, Some(&map));
-                trackmap_overlay.render_ui(ui, rect, &el, None, None);
+                trackmap_overlay.render_ui(
+                    ui,
+                    rect,
+                    &el,
+                    &crate::telemetry::TelemetryState {
+                        current_sample: None,
+                        previous_laps: vec![],
+                        best_lap: None,
+                        projection_ms: None,
+                    },
+                    Some(&map),
+                );
+                trackmap_overlay.render_ui(
+                    ui,
+                    rect,
+                    &el,
+                    &crate::telemetry::TelemetryState {
+                        current_sample: None,
+                        previous_laps: vec![],
+                        best_lap: None,
+                        projection_ms: None,
+                    },
+                    None,
+                );
 
                 let sample = crate::overlay::common::create_test_sample();
-                trackmap_overlay.render_ui(ui, rect, &el, Some(&sample), Some(&map));
+                trackmap_overlay.render_ui(
+                    ui,
+                    rect,
+                    &el,
+                    &crate::telemetry::TelemetryState {
+                        current_sample: Some(sample.clone()),
+                        previous_laps: vec![],
+                        best_lap: None,
+                        projection_ms: None,
+                    },
+                    Some(&map),
+                );
             });
         });
     }

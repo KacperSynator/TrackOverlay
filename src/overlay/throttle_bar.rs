@@ -1,6 +1,6 @@
 use crate::overlay::{OverlayImpl, common};
 use crate::project::OverlayElement;
-use crate::telemetry::TelemetrySample;
+use crate::telemetry::TelemetryState;
 use crate::trackmap::TrackMap;
 use eframe::egui;
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
@@ -13,7 +13,7 @@ impl OverlayImpl for ThrottleBar {
         ui: &mut egui::Ui,
         rect: egui::Rect,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
     ) {
         let painter = ui.painter_at(rect);
@@ -22,7 +22,7 @@ impl OverlayImpl for ThrottleBar {
             rect.top() + el.y * rect.height(),
         );
 
-        let throttle = common::get_throttle_ratio(sample);
+        let throttle = common::get_throttle_ratio(state.current_sample.as_ref());
 
         let width = 20.0 * el.scale;
         let max_height = 100.0 * el.scale;
@@ -47,7 +47,7 @@ impl OverlayImpl for ThrottleBar {
         &self,
         pixmap: &mut PixmapMut,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
     ) {
         let width = pixmap.width() as f32;
@@ -56,7 +56,7 @@ impl OverlayImpl for ThrottleBar {
         let center_x = el.x * width;
         let center_y = el.y * height;
 
-        let throttle = common::get_throttle_ratio(sample);
+        let throttle = common::get_throttle_ratio(state.current_sample.as_ref());
 
         let w = 20.0 * el.scale * res_scale;
         let max_h = 100.0 * el.scale * res_scale;
@@ -120,10 +120,30 @@ mod tests {
         let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
 
         let bar = ThrottleBar;
-        bar.render_skia(&mut pixmap, &el, None, None);
+        bar.render_skia(
+            &mut pixmap,
+            &el,
+            &crate::telemetry::TelemetryState {
+                current_sample: None,
+                previous_laps: vec![],
+                best_lap: None,
+                projection_ms: None,
+            },
+            None,
+        );
 
         let sample = crate::overlay::common::create_test_sample();
-        bar.render_skia(&mut pixmap, &el, Some(&sample), None);
+        bar.render_skia(
+            &mut pixmap,
+            &el,
+            &crate::telemetry::TelemetryState {
+                current_sample: Some(sample.clone()),
+                previous_laps: vec![],
+                best_lap: None,
+                projection_ms: None,
+            },
+            None,
+        );
     }
 
     #[test]
@@ -135,10 +155,32 @@ mod tests {
                 let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
 
                 let bar = ThrottleBar;
-                bar.render_ui(ui, rect, &el, None, None);
+                bar.render_ui(
+                    ui,
+                    rect,
+                    &el,
+                    &crate::telemetry::TelemetryState {
+                        current_sample: None,
+                        previous_laps: vec![],
+                        best_lap: None,
+                        projection_ms: None,
+                    },
+                    None,
+                );
 
                 let sample = crate::overlay::common::create_test_sample();
-                bar.render_ui(ui, rect, &el, Some(&sample), None);
+                bar.render_ui(
+                    ui,
+                    rect,
+                    &el,
+                    &crate::telemetry::TelemetryState {
+                        current_sample: Some(sample.clone()),
+                        previous_laps: vec![],
+                        best_lap: None,
+                        projection_ms: None,
+                    },
+                    None,
+                );
             });
         });
     }

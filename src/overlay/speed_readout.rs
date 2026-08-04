@@ -1,6 +1,6 @@
 use crate::overlay::{OverlayImpl, common};
 use crate::project::OverlayElement;
-use crate::telemetry::TelemetrySample;
+use crate::telemetry::TelemetryState;
 use crate::trackmap::TrackMap;
 use eframe::egui;
 use rusttype::Font;
@@ -14,7 +14,7 @@ impl OverlayImpl for SpeedReadout {
         ui: &mut egui::Ui,
         rect: egui::Rect,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
     ) {
         let painter = ui.painter_at(rect);
@@ -23,7 +23,7 @@ impl OverlayImpl for SpeedReadout {
             rect.top() + el.y * rect.height(),
         );
 
-        let text = common::get_speed_text(sample);
+        let text = common::get_speed_text(state.current_sample.as_ref());
         painter.text(
             center,
             egui::Align2::CENTER_CENTER,
@@ -37,7 +37,7 @@ impl OverlayImpl for SpeedReadout {
         &self,
         pixmap: &mut PixmapMut,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
     ) {
         let width = pixmap.width() as f32;
@@ -49,7 +49,7 @@ impl OverlayImpl for SpeedReadout {
         let font_data = include_bytes!("../font.ttf");
         let font_opt = Font::try_from_bytes(font_data as &[u8]);
 
-        let text = common::get_speed_text(sample);
+        let text = common::get_speed_text(state.current_sample.as_ref());
         if let Some(font) = &font_opt {
             common::draw_text(
                 pixmap,
@@ -95,10 +95,30 @@ mod tests {
         let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
 
         let readout = SpeedReadout;
-        readout.render_skia(&mut pixmap, &el, None, None);
+        readout.render_skia(
+            &mut pixmap,
+            &el,
+            &crate::telemetry::TelemetryState {
+                current_sample: None,
+                previous_laps: vec![],
+                best_lap: None,
+                projection_ms: None,
+            },
+            None,
+        );
 
         let sample = crate::overlay::common::create_test_sample();
-        readout.render_skia(&mut pixmap, &el, Some(&sample), None);
+        readout.render_skia(
+            &mut pixmap,
+            &el,
+            &crate::telemetry::TelemetryState {
+                current_sample: Some(sample.clone()),
+                previous_laps: vec![],
+                best_lap: None,
+                projection_ms: None,
+            },
+            None,
+        );
     }
 
     #[test]
@@ -110,10 +130,32 @@ mod tests {
                 let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
 
                 let readout = SpeedReadout;
-                readout.render_ui(ui, rect, &el, None, None);
+                readout.render_ui(
+                    ui,
+                    rect,
+                    &el,
+                    &crate::telemetry::TelemetryState {
+                        current_sample: None,
+                        previous_laps: vec![],
+                        best_lap: None,
+                        projection_ms: None,
+                    },
+                    None,
+                );
 
                 let sample = crate::overlay::common::create_test_sample();
-                readout.render_ui(ui, rect, &el, Some(&sample), None);
+                readout.render_ui(
+                    ui,
+                    rect,
+                    &el,
+                    &crate::telemetry::TelemetryState {
+                        current_sample: Some(sample.clone()),
+                        previous_laps: vec![],
+                        best_lap: None,
+                        projection_ms: None,
+                    },
+                    None,
+                );
             });
         });
     }

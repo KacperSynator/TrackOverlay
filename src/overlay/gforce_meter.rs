@@ -1,6 +1,6 @@
 use crate::overlay::{OverlayImpl, common};
 use crate::project::OverlayElement;
-use crate::telemetry::TelemetrySample;
+use crate::telemetry::TelemetryState;
 use crate::trackmap::TrackMap;
 use eframe::egui;
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Stroke, Transform};
@@ -13,7 +13,7 @@ impl OverlayImpl for GForceMeter {
         ui: &mut egui::Ui,
         rect: egui::Rect,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
     ) {
         let painter = ui.painter_at(rect);
@@ -29,7 +29,7 @@ impl OverlayImpl for GForceMeter {
             egui::Stroke::new(2.0 * el.scale, egui::Color32::WHITE),
         );
 
-        let (dx, dy) = common::get_gforce_dot(sample, radius);
+        let (dx, dy) = common::get_gforce_dot(state.current_sample.as_ref(), radius);
         let dot_pos = center + egui::vec2(dx, dy);
         painter.circle_filled(dot_pos, 5.0 * el.scale, egui::Color32::RED);
     }
@@ -38,7 +38,7 @@ impl OverlayImpl for GForceMeter {
         &self,
         pixmap: &mut PixmapMut,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
     ) {
         let width = pixmap.width() as f32;
@@ -62,7 +62,7 @@ impl OverlayImpl for GForceMeter {
             pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
         }
 
-        let (dx, dy) = common::get_gforce_dot(sample, radius);
+        let (dx, dy) = common::get_gforce_dot(state.current_sample.as_ref(), radius);
         let mut paint_red = Paint::default();
         paint_red.set_color_rgba8(255, 0, 0, 255);
         paint_red.anti_alias = true;
@@ -107,6 +107,8 @@ mod tests {
             lap_number: Some(2),
             lap_time_ms: Some(150500),
             throttle_pct: 75.0,
+            session_distance_m: 0.0,
+            lap_distance_m: 0.0,
         }
     }
 
@@ -117,10 +119,30 @@ mod tests {
         let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
 
         let meter = GForceMeter;
-        meter.render_skia(&mut pixmap, &el, None, None);
+        meter.render_skia(
+            &mut pixmap,
+            &el,
+            &crate::telemetry::TelemetryState {
+                current_sample: None,
+                previous_laps: vec![],
+                best_lap: None,
+                projection_ms: None,
+            },
+            None,
+        );
 
         let sample = create_test_sample();
-        meter.render_skia(&mut pixmap, &el, Some(&sample), None);
+        meter.render_skia(
+            &mut pixmap,
+            &el,
+            &crate::telemetry::TelemetryState {
+                current_sample: Some(sample.clone()),
+                previous_laps: vec![],
+                best_lap: None,
+                projection_ms: None,
+            },
+            None,
+        );
     }
 
     #[test]
@@ -132,10 +154,32 @@ mod tests {
                 let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
 
                 let meter = GForceMeter;
-                meter.render_ui(ui, rect, &el, None, None);
+                meter.render_ui(
+                    ui,
+                    rect,
+                    &el,
+                    &crate::telemetry::TelemetryState {
+                        current_sample: None,
+                        previous_laps: vec![],
+                        best_lap: None,
+                        projection_ms: None,
+                    },
+                    None,
+                );
 
                 let sample = create_test_sample();
-                meter.render_ui(ui, rect, &el, Some(&sample), None);
+                meter.render_ui(
+                    ui,
+                    rect,
+                    &el,
+                    &crate::telemetry::TelemetryState {
+                        current_sample: Some(sample.clone()),
+                        previous_laps: vec![],
+                        best_lap: None,
+                        projection_ms: None,
+                    },
+                    None,
+                );
             });
         });
     }

@@ -40,6 +40,25 @@ pub struct TelemetrySample {
     pub lap_number: Option<u32>,
     pub lap_time_ms: Option<i64>,
     pub throttle_pct: f32,
+    pub session_distance_m: f64,
+    pub lap_distance_m: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LapStat {
+    pub lap_number: u32,
+    pub start_time_ms: i64,
+    pub end_time_ms: i64,
+    pub duration_ms: i64,
+    pub total_distance_m: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TelemetryState {
+    pub current_sample: Option<TelemetrySample>,
+    pub previous_laps: Vec<LapStat>,
+    pub best_lap: Option<LapStat>,
+    pub projection_ms: Option<i64>, // Diff to best lap
 }
 
 #[derive(Clone)]
@@ -58,6 +77,9 @@ impl TelemetryLog {
         let mut lap_start_time = 0.0;
         let mut current_lap = 0;
         let mut start_time_utc = None;
+        let mut session_distance_m = 0.0;
+        let mut lap_distance_m = 0.0;
+        let mut last_time = 0.0;
 
         for (i, result) in rdr.deserialize().enumerate() {
             let row: RawTelemetryRow = match result {
@@ -81,7 +103,16 @@ impl TelemetryLog {
             if row.lap != current_lap {
                 current_lap = row.lap;
                 lap_start_time = row.time;
+                lap_distance_m = 0.0;
             }
+
+            let dt = row.time - last_time;
+            if i > 0 && dt > 0.0 {
+                let dist = (row.speed_kph as f64 / 3.6) * dt;
+                session_distance_m += dist;
+                lap_distance_m += dist;
+            }
+            last_time = row.time;
 
             let lap_time_ms = ((row.time - lap_start_time) * 1000.0) as i64;
 
@@ -95,6 +126,8 @@ impl TelemetryLog {
                 lap_number: Some(row.lap),
                 lap_time_ms: Some(lap_time_ms),
                 throttle_pct: row.throttle_position,
+                session_distance_m,
+                lap_distance_m,
             });
         }
 
@@ -155,9 +188,121 @@ impl TelemetryLog {
                             l1 + ((l2 - l1) as f32 * t) as i64
                         }),
                         throttle_pct: s1.throttle_pct + (s2.throttle_pct - s1.throttle_pct) * t,
+                        session_distance_m: s1.session_distance_m
+                            + (s2.session_distance_m - s1.session_distance_m) * t as f64,
+                        lap_distance_m: s1.lap_distance_m
+                            + (s2.lap_distance_m - s1.lap_distance_m) * t as f64,
                     })
                 }
             }
+        }
+    }
+}
+
+impl TelemetryLog {
+    pub fn get_state(&self, t_ms: i64) -> TelemetryState {
+        let current_sample = self.sample_at(t_ms);
+
+        let mut laps = Vec::new();
+        let mut current_lap_start_idx = 0;
+        let mut current_lap = self.samples.first().and_then(|s| s.lap_number).unwrap_or(0);
+
+        for (i, s) in self.samples.iter().enumerate() {
+            if let Some(lap) = s.lap_number
+                && lap != current_lap
+            {
+                let end_idx = i - 1;
+                if end_idx >= current_lap_start_idx {
+                    let start_s = &self.samples[current_lap_start_idx];
+                    let end_s = &self.samples[end_idx];
+
+                    laps.push(LapStat {
+                        lap_number: current_lap,
+                        start_time_ms: start_s.time_ms,
+                        end_time_ms: end_s.time_ms,
+                        duration_ms: end_s.time_ms - start_s.time_ms,
+                        total_distance_m: end_s.lap_distance_m,
+                    });
+                }
+                current_lap = lap;
+                current_lap_start_idx = i;
+            }
+        }
+
+        let mut completed_laps = Vec::new();
+        for lap in laps {
+            if lap.end_time_ms <= t_ms {
+                completed_laps.push(lap);
+            }
+        }
+
+        let best_lap = completed_laps.iter().min_by_key(|l| l.duration_ms).cloned();
+
+        let mut previous_laps = completed_laps.clone();
+        previous_laps.sort_by_key(|l| std::cmp::Reverse(l.end_time_ms)); // most recent first
+        previous_laps.truncate(3);
+
+        let mut projection_ms = None;
+        if let (Some(sample), Some(best)) = (&current_sample, &best_lap)
+            && sample.lap_time_ms.unwrap_or(0) > 0
+        {
+            // Only project if we are actually in a lap
+            let start_time = best.start_time_ms;
+            let end_time = best.end_time_ms;
+
+            let best_lap_samples = self
+                .samples
+                .iter()
+                .filter(|s| s.time_ms >= start_time && s.time_ms <= end_time)
+                .collect::<Vec<_>>();
+
+            if !best_lap_samples.is_empty() {
+                let target_dist = sample.lap_distance_m;
+
+                let mut best_lap_elapsed = 0; // Fix unused_assignments check
+                let _ = best_lap_elapsed;
+                match best_lap_samples.binary_search_by(|s| {
+                    s.lap_distance_m
+                        .partial_cmp(&target_dist)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                }) {
+                    Ok(idx) => {
+                        best_lap_elapsed = best_lap_samples[idx].time_ms - start_time;
+                    }
+                    Err(idx) => {
+                        if idx == 0 {
+                            best_lap_elapsed = best_lap_samples[0].time_ms - start_time;
+                        } else if idx >= best_lap_samples.len() {
+                            best_lap_elapsed =
+                                best_lap_samples.last().unwrap().time_ms - start_time;
+                        } else {
+                            let s1 = best_lap_samples[idx - 1];
+                            let s2 = best_lap_samples[idx];
+
+                            let dd = s2.lap_distance_m - s1.lap_distance_m;
+                            let t = if dd > 0.0 {
+                                (target_dist - s1.lap_distance_m) / dd
+                            } else {
+                                0.0
+                            };
+
+                            let time_at_dist =
+                                s1.time_ms + ((s2.time_ms - s1.time_ms) as f64 * t) as i64;
+                            best_lap_elapsed = time_at_dist - start_time;
+                        }
+                    }
+                }
+
+                let current_elapsed = sample.lap_time_ms.unwrap_or(0);
+                projection_ms = Some(current_elapsed - best_lap_elapsed);
+            }
+        }
+
+        TelemetryState {
+            current_sample,
+            previous_laps,
+            best_lap,
+            projection_ms,
         }
     }
 }
