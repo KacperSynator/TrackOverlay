@@ -391,56 +391,13 @@ impl MyApp {
                 ui.separator();
                 ui.label("Layout Editor");
 
-                ui.horizontal(|ui| {
-                    if ui.button("Add Advanced Lap Timer").clicked()
-                        && !self.config.elements.iter().any(|e| {
-                            matches!(
-                                e.kind,
-                                track_overlay::project::OverlayKind::AdvancedLapTimer
-                            )
-                        })
-                    {
-                        self.config
-                            .elements
-                            .push(track_overlay::project::OverlayElement {
-                                enabled: true,
-                                kind: track_overlay::project::OverlayKind::AdvancedLapTimer,
-                                x: 0.1,
-                                y: 0.1,
-                                scale: 1.0,
-                            });
-                    }
-                    if ui.button("Add Lap Timer").clicked()
-                        && !self.config.elements.iter().any(|e| {
-                            matches!(e.kind, track_overlay::project::OverlayKind::LapTimer)
-                        })
-                    {
-                        self.config
-                            .elements
-                            .push(track_overlay::project::OverlayElement {
-                                enabled: true,
-                                kind: track_overlay::project::OverlayKind::LapTimer,
-                                x: 0.1,
-                                y: 0.1,
-                                scale: 1.0,
-                            });
-                    }
-                });
-
-                let mut idx_to_remove = None;
-                for (i, el) in self.config.elements.iter_mut().enumerate() {
+                for el in self.config.elements.iter_mut() {
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut el.enabled, format!("{:?}", el.kind));
                         ui.add(egui::Slider::new(&mut el.x, 0.0..=1.0).text("X"));
                         ui.add(egui::Slider::new(&mut el.y, 0.0..=1.0).text("Y"));
                         ui.add(egui::Slider::new(&mut el.scale, 0.5..=3.0).text("Scale"));
-                        if ui.button("Remove").clicked() {
-                            idx_to_remove = Some(i);
-                        }
                     });
-                }
-                if let Some(idx) = idx_to_remove {
-                    self.config.elements.remove(idx);
                 }
 
                 ui.separator();
