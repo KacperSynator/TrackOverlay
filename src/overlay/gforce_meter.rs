@@ -96,8 +96,8 @@ mod tests {
         }
     }
 
-    pub fn create_test_sample() -> TelemetrySample {
-        TelemetrySample {
+    pub fn create_test_sample() -> crate::telemetry::TelemetrySample {
+        crate::telemetry::TelemetrySample {
             time_ms: 1000,
             speed_kph: 120.5,
             lat: 10.0,
