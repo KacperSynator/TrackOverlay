@@ -104,10 +104,8 @@ pub fn export_video(
         samples: telemetry_view.samples.to_vec(),
         start_time_utc: telemetry_view.start_time_utc,
     };
-    let trackmap = crate::trackmap::TrackMap::from_telemetry(
-        &temp_log,
-        &telemetry_view.extract_laps(),
-    );
+    let trackmap =
+        crate::trackmap::TrackMap::from_telemetry(&temp_log, &telemetry_view.extract_laps());
 
     let total_frames = if input_stream.frames() > 0 {
         input_stream.frames() as usize
@@ -285,7 +283,12 @@ pub fn export_video(
                 / time_base.denominator() as f64
                 * 1000.0;
             let state = telemetry_view.get_state(pts_ms as i64 + config.sync.offset_ms);
-            crate::overlay::render_overlay_skia(&mut pixmap, &config.elements, &state, trackmap.as_ref());
+            crate::overlay::render_overlay_skia(
+                &mut pixmap,
+                &config.elements,
+                &state,
+                trackmap.as_ref(),
+            );
         }
 
         for y in 0..h as usize {

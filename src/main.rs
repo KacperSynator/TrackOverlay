@@ -387,10 +387,13 @@ impl MyApp {
                         self.config.sync.offset_ms
                     ));
                 } else {
-                    if ui.add(
-                        egui::Slider::new(&mut self.config.sync.offset_ms, -120000..=120000)
-                            .text("Sync Offset (ms)"),
-                    ).changed() {
+                    if ui
+                        .add(
+                            egui::Slider::new(&mut self.config.sync.offset_ms, -120000..=120000)
+                                .text("Sync Offset (ms)"),
+                        )
+                        .changed()
+                    {
                         needs_telemetry_recalc = true;
                     }
                 }
