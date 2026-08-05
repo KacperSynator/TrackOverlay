@@ -1,9 +1,9 @@
-use track_overlay::overlay::advanced_lap_timer::AdvancedLapTimer;
-use track_overlay::overlay::OverlayImpl;
-use track_overlay::project::{OverlayElement, OverlayKind};
-use track_overlay::telemetry::{LapStat, TelemetrySample, TelemetryState};
 use eframe::egui;
 use tiny_skia::PixmapMut;
+use track_overlay::overlay::OverlayImpl;
+use track_overlay::overlay::advanced_lap_timer::AdvancedLapTimer;
+use track_overlay::project::{OverlayElement, OverlayKind};
+use track_overlay::telemetry::{LapStat, TelemetrySample, TelemetryState};
 
 fn create_test_state() -> TelemetryState {
     let sample = TelemetrySample {
