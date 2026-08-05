@@ -725,15 +725,14 @@ mod tests {
 
     #[test]
     fn test_format_time_str_negative() {
-        // Edge cases (negative values)
         assert_eq!(format_time_str(-1.0), "-1");
         assert_eq!(format_time_str(-0.5), "-1");
-        assert_eq!(format_time_str(std::f64::NEG_INFINITY), "-1");
     }
 
     #[test]
     fn test_format_time_str_floating_limits() {
-        assert_eq!(format_time_str(std::f64::NAN), "NaN");
-        assert_eq!(format_time_str(std::f64::INFINITY), "4294967295:00NaN");
+        assert_eq!(format_time_str(f64::NAN), "NaN");
+        assert_eq!(format_time_str(f64::INFINITY), "4294967295:00NaN");
+        assert_eq!(format_time_str(f64::NEG_INFINITY), "-1");
     }
 }
