@@ -264,6 +264,8 @@ impl MyApp {
                 ui.separator();
                 ui.heading("Export Range");
 
+                let mut needs_telemetry_recalc = false;
+
                 ui.horizontal(|ui| {
                     let mut start_sec = self.config.export_start_ms.unwrap_or(0) as f64 / 1000.0;
                     if ui
@@ -277,6 +279,7 @@ impl MyApp {
                         .changed()
                     {
                         self.config.export_start_ms = Some((start_sec * 1000.0) as i64);
+                        needs_telemetry_recalc = true;
                     }
                     if ui.button("Jump").clicked() {
                         self.playhead_ms = self.config.export_start_ms.unwrap_or(0);
@@ -305,6 +308,7 @@ impl MyApp {
                         } else {
                             -1
                         });
+                        needs_telemetry_recalc = true;
                     }
                     if ui.button("Jump").clicked() {
                         if let Some(end_val) = self.config.export_end_ms {
@@ -368,6 +372,7 @@ impl MyApp {
                         {
                             self.config.sync.offset_ms = offset;
                             done = true;
+                            needs_telemetry_recalc = true;
                         }
                         if done {
                             self.auto_sync_progress = None;
@@ -382,10 +387,16 @@ impl MyApp {
                         self.config.sync.offset_ms
                     ));
                 } else {
-                    ui.add(
+                    if ui.add(
                         egui::Slider::new(&mut self.config.sync.offset_ms, -120000..=120000)
                             .text("Sync Offset (ms)"),
-                    );
+                    ).changed() {
+                        needs_telemetry_recalc = true;
+                    }
+                }
+
+                if needs_telemetry_recalc {
+                    self.recalculate_telemetry();
                 }
 
                 ui.separator();
@@ -414,6 +425,26 @@ impl MyApp {
         });
     }
 
+    fn recalculate_telemetry(&mut self) {
+        if let Some(log) = &self.telemetry {
+            let view = track_overlay::telemetry::TelemetryView::new(
+                log,
+                self.config.export_start_ms,
+                self.config.export_end_ms,
+                self.config.sync.offset_ms,
+            );
+
+            self.telemetry_laps = view.extract_laps();
+
+            // Rebuild a temporary TelemetryLog for trackmap creation since from_telemetry requires it currently
+            let temp_log = TelemetryLog {
+                samples: view.samples.to_vec(),
+                start_time_utc: view.start_time_utc,
+            };
+            self.trackmap = TrackMap::from_telemetry(&temp_log, &self.telemetry_laps);
+        }
+    }
+
     fn handle_dialogs(&mut self, ctx: &egui::Context) {
         // Update the file dialog
         self.file_dialog.update(ctx);
@@ -440,19 +471,8 @@ impl MyApp {
                 DialogMode::PickTelemetry => {
                     self.config.telemetry_path = path_buf.clone();
                     if let Ok(log) = TelemetryLog::load_csv(&path_buf) {
-                        self.telemetry_laps.clear();
-                        let mut current_lap = None;
-                        for s in &log.samples {
-                            if let Some(lap) = s.lap_number
-                                && Some(lap) != current_lap
-                            {
-                                current_lap = Some(lap);
-                                self.telemetry_laps.push((lap, s.time_ms));
-                            }
-                        }
-
-                        self.trackmap = TrackMap::from_telemetry(&log, &self.telemetry_laps);
                         self.telemetry = Some(log);
+                        self.recalculate_telemetry();
                     }
                 }
                 DialogMode::PickExportOutput => {
@@ -571,7 +591,13 @@ impl MyApp {
             }
 
             let state = if let Some(log) = &self.telemetry {
-                log.get_state(self.playhead_ms + self.config.sync.offset_ms)
+                let view = track_overlay::telemetry::TelemetryView::new(
+                    log,
+                    self.config.export_start_ms,
+                    self.config.export_end_ms,
+                    self.config.sync.offset_ms,
+                );
+                view.get_state(self.playhead_ms + self.config.sync.offset_ms)
             } else {
                 track_overlay::telemetry::TelemetryState {
                     current_sample: None,
