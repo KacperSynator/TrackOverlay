@@ -707,4 +707,32 @@ mod tests {
         assert_eq!(parse_time_str(""), None);
         assert_eq!(parse_time_str(":"), None);
     }
+
+    #[test]
+    fn test_format_time_str_under_minute() {
+        assert_eq!(format_time_str(0.0), "0.00");
+        assert_eq!(format_time_str(5.5), "5.50");
+        assert_eq!(format_time_str(45.123), "45.12");
+    }
+
+    #[test]
+    fn test_format_time_str_over_minute() {
+        assert_eq!(format_time_str(60.0), "1:00.00");
+        assert_eq!(format_time_str(65.123), "1:05.12");
+        assert_eq!(format_time_str(125.999), "2:06.00");
+        assert_eq!(format_time_str(600.0), "10:00.00");
+    }
+
+    #[test]
+    fn test_format_time_str_negative() {
+        assert_eq!(format_time_str(-1.0), "-1");
+        assert_eq!(format_time_str(-0.5), "-1");
+    }
+
+    #[test]
+    fn test_format_time_str_floating_limits() {
+        assert_eq!(format_time_str(f64::NAN), "NaN");
+        assert_eq!(format_time_str(f64::INFINITY), "4294967295:00NaN");
+        assert_eq!(format_time_str(f64::NEG_INFINITY), "-1");
+    }
 }
