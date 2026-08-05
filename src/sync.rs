@@ -259,7 +259,10 @@ mod tests {
         assert!(
             (a - b).abs() < tolerance,
             "assertion failed: `(left !== right)`\n  left: `{}`,\n right: `{}`,\n diff: `{}`,\n tolerance: `{}`",
-            a, b, (a - b).abs(), tolerance
+            a,
+            b,
+            (a - b).abs(),
+            tolerance
         );
     }
 
@@ -344,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_haversine_nan_inputs() {
-        let lat = std::f64::NAN;
+        let lat = f64::NAN;
         let lon = 0.0;
         let dist = haversine(lat, lon, 0.0, 0.0);
         assert!(dist.is_nan(), "Expected NaN distance for NaN input");
