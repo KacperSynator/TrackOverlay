@@ -662,3 +662,49 @@ impl eframe::App for MyApp {
         self.build_ui(ui);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_time_str_minutes_and_seconds() {
+        assert_eq!(parse_time_str("1:30"), Some(90.0));
+        assert_eq!(parse_time_str("0:45"), Some(45.0));
+        assert_eq!(parse_time_str("10:00"), Some(600.0));
+    }
+
+    #[test]
+    fn test_parse_time_str_seconds_only() {
+        assert_eq!(parse_time_str("90"), Some(90.0));
+        assert_eq!(parse_time_str("45"), Some(45.0));
+        assert_eq!(parse_time_str("0"), Some(0.0));
+    }
+
+    #[test]
+    fn test_parse_time_str_fractions() {
+        assert_eq!(parse_time_str("3.5"), Some(3.5));
+        assert_eq!(parse_time_str("1:03.5"), Some(63.5));
+        assert_eq!(parse_time_str("0:00.123"), Some(0.123));
+    }
+
+    #[test]
+    fn test_parse_time_str_large_numbers() {
+        assert_eq!(parse_time_str("600"), Some(600.0));
+        assert_eq!(parse_time_str("600:00"), Some(36000.0));
+    }
+
+    #[test]
+    fn test_parse_time_str_negative_times() {
+        assert_eq!(parse_time_str("-1:30"), Some(-30.0));
+    }
+
+    #[test]
+    fn test_parse_time_str_invalid() {
+        assert_eq!(parse_time_str("abc"), None);
+        assert_eq!(parse_time_str("1:2:3"), None);
+        assert_eq!(parse_time_str("1:abc"), None);
+        assert_eq!(parse_time_str(""), None);
+        assert_eq!(parse_time_str(":"), None);
+    }
+}
