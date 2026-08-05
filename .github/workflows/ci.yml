@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -76,32 +78,13 @@ jobs:
         with:
           name: coverage-report
           path: coverage-report/tarpaulin-report.html
-      - name: Code Coverage Summary Report
-        if: always()
-        uses: irongut/CodeCoverageSummary@v1.3.0
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
         with:
-          filename: coverage-report/cobertura.xml
-          badge: true
-          format: markdown
-          output: both
-          hide_complexity: true
-      - name: Add Coverage PR Comment Legend
-        if: always() && github.event_name == 'pull_request'
-        run: |
-          sudo chown $USER:$USER code-coverage-results.md
-          echo "" >> code-coverage-results.md
-          echo "**Health Indicator Legend:**" >> code-coverage-results.md
-          echo "❌ Below 50% coverage" >> code-coverage-results.md
-          echo "➖ Between 50% and 75% coverage" >> code-coverage-results.md
-          echo "✔️ Above 75% coverage" >> code-coverage-results.md
-          echo "" >> code-coverage-results.md
-          echo "📥 [Download HTML Coverage Report](${{ steps.coverage-upload.outputs.artifact-url }})" >> code-coverage-results.md
-      - name: Write PR Comment
-        uses: marocchino/sticky-pull-request-comment@v2
-        if: always() && github.event_name == 'pull_request'
-        with:
-          recreate: true
-          path: code-coverage-results.md
+          files: coverage-report/cobertura.xml
+          fail_ci_if_error: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   benchmark:
     name: Benchmark
