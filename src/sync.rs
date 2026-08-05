@@ -249,3 +249,104 @@ fn haversine(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
     r * c
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helper function to compare f64 with a tolerance
+    fn assert_approx_eq(a: f64, b: f64, tolerance: f64) {
+        assert!(
+            (a - b).abs() < tolerance,
+            "assertion failed: `(left !== right)`\n  left: `{}`,\n right: `{}`,\n diff: `{}`,\n tolerance: `{}`",
+            a, b, (a - b).abs(), tolerance
+        );
+    }
+
+    #[test]
+    fn test_haversine_identical_points() {
+        let lat = 51.5074;
+        let lon = -0.1278;
+        // Same point should be exactly 0 distance
+        assert_approx_eq(haversine(lat, lon, lat, lon), 0.0, 1e-6);
+    }
+
+    #[test]
+    fn test_haversine_known_short_distance() {
+        // Points roughly 1 km apart (approx 0.009 degrees of latitude)
+        let lat1 = 40.0;
+        let lon1 = -74.0;
+        let lat2 = 40.009;
+        let lon2 = -74.0;
+
+        // 0.009 degrees * (PI / 180) * 6371000 = 1000.755 meters
+        let expected_dist = 1000.755;
+        let dist = haversine(lat1, lon1, lat2, lon2);
+        assert_approx_eq(dist, expected_dist, 1.0);
+    }
+
+    #[test]
+    fn test_haversine_known_long_distance() {
+        // London (51.5074, -0.1278) to New York (40.7128, -74.0060)
+        let lat1 = 51.5074;
+        let lon1 = -0.1278;
+        let lat2 = 40.7128;
+        let lon2 = -74.0060;
+
+        // Expected value manually verified against Haversine with R=6371.0
+        let dist = haversine(lat1, lon1, lat2, lon2);
+        assert_approx_eq(dist, 5570222.179737957, 10.0); // Within 10 meters tolerance
+    }
+
+    #[test]
+    fn test_haversine_equator_crossing() {
+        // Crossing the equator exactly
+        let lat1 = -1.0;
+        let lon1 = 0.0;
+        let lat2 = 1.0;
+        let lon2 = 0.0;
+        let expected = 2.0 * (std::f64::consts::PI / 180.0) * 6371000.0; // 2 degrees of latitude
+        assert_approx_eq(haversine(lat1, lon1, lat2, lon2), expected, 1.0);
+    }
+
+    #[test]
+    fn test_haversine_prime_meridian_crossing() {
+        // Crossing the prime meridian exactly
+        let lat1 = 0.0;
+        let lon1 = -1.0;
+        let lat2 = 0.0;
+        let lon2 = 1.0;
+        let expected = 2.0 * (std::f64::consts::PI / 180.0) * 6371000.0; // 2 degrees of longitude at equator
+        assert_approx_eq(haversine(lat1, lon1, lat2, lon2), expected, 1.0);
+    }
+
+    #[test]
+    fn test_haversine_anti_meridian_crossing() {
+        // Crossing the 180th meridian
+        let lat1 = 0.0;
+        let lon1 = 179.0;
+        let lat2 = 0.0;
+        let lon2 = -179.0;
+        let expected = 2.0 * (std::f64::consts::PI / 180.0) * 6371000.0; // 2 degrees of longitude at equator
+        assert_approx_eq(haversine(lat1, lon1, lat2, lon2), expected, 1.0);
+    }
+
+    #[test]
+    fn test_haversine_poles() {
+        // North Pole to South Pole
+        let lat1 = 90.0;
+        let lon1 = 0.0;
+        let lat2 = -90.0;
+        let lon2 = 0.0;
+        let expected = 180.0 * (std::f64::consts::PI / 180.0) * 6371000.0; // Half circumference
+        assert_approx_eq(haversine(lat1, lon1, lat2, lon2), expected, 1.0);
+    }
+
+    #[test]
+    fn test_haversine_nan_inputs() {
+        let lat = std::f64::NAN;
+        let lon = 0.0;
+        let dist = haversine(lat, lon, 0.0, 0.0);
+        assert!(dist.is_nan(), "Expected NaN distance for NaN input");
+    }
+}
