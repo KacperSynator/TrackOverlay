@@ -8,7 +8,20 @@ use tiny_skia::{Color, PixmapMut};
 
 pub struct AdvancedLapTimer;
 
-struct DrawContext<'a> {
+struct UiDrawContext<'a> {
+    painter: &'a egui::Painter,
+    center: egui::Pos2,
+    el: &'a OverlayElement,
+    y_offset: f32,
+    line_height: f32,
+}
+
+struct SkiaDrawContext<'a, 'b> {
+    pixmap: &'a mut PixmapMut<'b>,
+    font: &'a Font<'a>,
+    center_x: f32,
+    center_y: f32,
+    res_scale: f32,
     el: &'a OverlayElement,
     y_offset: f32,
     line_height: f32,
@@ -37,15 +50,10 @@ impl AdvancedLapTimer {
         format!("{:02}:{:05.2}", mins, secs)
     }
 
-    fn draw_ui_current_time(
-        painter: &egui::Painter,
-        center: egui::Pos2,
-        ctx: &mut DrawContext,
-        state: &TelemetryState,
-    ) {
+    fn draw_ui_current_time(ctx: &mut UiDrawContext, state: &TelemetryState) {
         let current_text = common::get_lap_timer_text(state.current_sample.as_ref());
-        painter.text(
-            egui::pos2(center.x, center.y + ctx.y_offset),
+        ctx.painter.text(
+            egui::pos2(ctx.center.x, ctx.center.y + ctx.y_offset),
             egui::Align2::CENTER_CENTER,
             current_text,
             egui::FontId::proportional(32.0 * ctx.el.scale),
@@ -54,20 +62,15 @@ impl AdvancedLapTimer {
         ctx.y_offset += 36.0 * ctx.el.scale;
     }
 
-    fn draw_ui_projection(
-        painter: &egui::Painter,
-        center: egui::Pos2,
-        ctx: &mut DrawContext,
-        diff: i64,
-    ) {
+    fn draw_ui_projection(ctx: &mut UiDrawContext, diff: i64) {
         let color = if diff < 0 {
             egui::Color32::GREEN
         } else {
             egui::Color32::RED
         };
         let diff_text = Self::format_diff(diff);
-        painter.text(
-            egui::pos2(center.x, center.y + ctx.y_offset),
+        ctx.painter.text(
+            egui::pos2(ctx.center.x, ctx.center.y + ctx.y_offset),
             egui::Align2::CENTER_CENTER,
             diff_text,
             egui::FontId::proportional(24.0 * ctx.el.scale),
@@ -76,19 +79,14 @@ impl AdvancedLapTimer {
         ctx.y_offset += ctx.line_height;
     }
 
-    fn draw_ui_best_lap(
-        painter: &egui::Painter,
-        center: egui::Pos2,
-        ctx: &mut DrawContext,
-        best: &LapStat,
-    ) {
+    fn draw_ui_best_lap(ctx: &mut UiDrawContext, best: &LapStat) {
         let best_text = format!(
             "Best (L{}): {}",
             best.lap_number,
             Self::format_time(best.duration_ms)
         );
-        painter.text(
-            egui::pos2(center.x, center.y + ctx.y_offset),
+        ctx.painter.text(
+            egui::pos2(ctx.center.x, ctx.center.y + ctx.y_offset),
             egui::Align2::CENTER_CENTER,
             best_text,
             egui::FontId::proportional(16.0 * ctx.el.scale),
@@ -97,12 +95,7 @@ impl AdvancedLapTimer {
         ctx.y_offset += ctx.line_height;
     }
 
-    fn draw_ui_previous_laps(
-        painter: &egui::Painter,
-        center: egui::Pos2,
-        ctx: &mut DrawContext,
-        previous_laps: &[LapStat],
-    ) {
+    fn draw_ui_previous_laps(ctx: &mut UiDrawContext, previous_laps: &[LapStat]) {
         for (i, lap) in previous_laps.iter().enumerate() {
             let lap_text = format!(
                 "L{}: {}",
@@ -110,8 +103,8 @@ impl AdvancedLapTimer {
                 Self::format_time(lap.duration_ms)
             );
             let alpha = 255 - (i as u8 * 50); // fade out older laps
-            painter.text(
-                egui::pos2(center.x, center.y + ctx.y_offset),
+            ctx.painter.text(
+                egui::pos2(ctx.center.x, ctx.center.y + ctx.y_offset),
                 egui::Align2::CENTER_CENTER,
                 lap_text,
                 egui::FontId::proportional(16.0 * ctx.el.scale),
@@ -121,37 +114,21 @@ impl AdvancedLapTimer {
         }
     }
 
-    fn draw_skia_current_time(
-        pixmap: &mut PixmapMut,
-        font: &Font,
-        center_x: f32,
-        center_y: f32,
-        res_scale: f32,
-        ctx: &mut DrawContext,
-        state: &TelemetryState,
-    ) {
+    fn draw_skia_current_time(ctx: &mut SkiaDrawContext, state: &TelemetryState) {
         let current_text = common::get_lap_timer_text(state.current_sample.as_ref());
         common::draw_text(
-            pixmap,
-            font,
+            ctx.pixmap,
+            ctx.font,
             &current_text,
-            center_x,
-            center_y + ctx.y_offset,
-            32.0 * ctx.el.scale * res_scale,
+            ctx.center_x,
+            ctx.center_y + ctx.y_offset,
+            32.0 * ctx.el.scale * ctx.res_scale,
             Color::from_rgba8(255, 255, 255, 255),
         );
-        ctx.y_offset += 36.0 * ctx.el.scale * res_scale;
+        ctx.y_offset += 36.0 * ctx.el.scale * ctx.res_scale;
     }
 
-    fn draw_skia_projection(
-        pixmap: &mut PixmapMut,
-        font: &Font,
-        center_x: f32,
-        center_y: f32,
-        res_scale: f32,
-        ctx: &mut DrawContext,
-        diff: i64,
-    ) {
+    fn draw_skia_projection(ctx: &mut SkiaDrawContext, diff: i64) {
         let color = if diff < 0 {
             Color::from_rgba8(0, 255, 0, 255) // Green
         } else {
@@ -159,52 +136,36 @@ impl AdvancedLapTimer {
         };
         let diff_text = Self::format_diff(diff);
         common::draw_text(
-            pixmap,
-            font,
+            ctx.pixmap,
+            ctx.font,
             &diff_text,
-            center_x,
-            center_y + ctx.y_offset,
-            24.0 * ctx.el.scale * res_scale,
+            ctx.center_x,
+            ctx.center_y + ctx.y_offset,
+            24.0 * ctx.el.scale * ctx.res_scale,
             color,
         );
         ctx.y_offset += ctx.line_height;
     }
 
-    fn draw_skia_best_lap(
-        pixmap: &mut PixmapMut,
-        font: &Font,
-        center_x: f32,
-        center_y: f32,
-        res_scale: f32,
-        ctx: &mut DrawContext,
-        best: &LapStat,
-    ) {
+    fn draw_skia_best_lap(ctx: &mut SkiaDrawContext, best: &LapStat) {
         let best_text = format!(
             "Best (L{}): {}",
             best.lap_number,
             Self::format_time(best.duration_ms)
         );
         common::draw_text(
-            pixmap,
-            font,
+            ctx.pixmap,
+            ctx.font,
             &best_text,
-            center_x,
-            center_y + ctx.y_offset,
-            16.0 * ctx.el.scale * res_scale,
+            ctx.center_x,
+            ctx.center_y + ctx.y_offset,
+            16.0 * ctx.el.scale * ctx.res_scale,
             Color::from_rgba8(255, 215, 0, 255), // Gold
         );
         ctx.y_offset += ctx.line_height;
     }
 
-    fn draw_skia_previous_laps(
-        pixmap: &mut PixmapMut,
-        font: &Font,
-        center_x: f32,
-        center_y: f32,
-        res_scale: f32,
-        ctx: &mut DrawContext,
-        previous_laps: &[LapStat],
-    ) {
+    fn draw_skia_previous_laps(ctx: &mut SkiaDrawContext, previous_laps: &[LapStat]) {
         for (i, lap) in previous_laps.iter().enumerate() {
             let lap_text = format!(
                 "L{}: {}",
@@ -213,12 +174,12 @@ impl AdvancedLapTimer {
             );
             let alpha = 255 - (i as u8 * 50);
             common::draw_text(
-                pixmap,
-                font,
+                ctx.pixmap,
+                ctx.font,
                 &lap_text,
-                center_x,
-                center_y + ctx.y_offset,
-                16.0 * ctx.el.scale * res_scale,
+                ctx.center_x,
+                ctx.center_y + ctx.y_offset,
+                16.0 * ctx.el.scale * ctx.res_scale,
                 Color::from_rgba8(255, 255, 255, alpha),
             );
             ctx.y_offset += ctx.line_height;
@@ -241,23 +202,25 @@ impl OverlayImpl for AdvancedLapTimer {
             rect.top() + el.y * rect.height(),
         );
 
-        let mut ctx = DrawContext {
+        let mut ctx = UiDrawContext {
+            painter: &painter,
+            center,
             el,
             y_offset: 0.0,
             line_height: 24.0 * el.scale,
         };
 
-        Self::draw_ui_current_time(&painter, center, &mut ctx, state);
+        Self::draw_ui_current_time(&mut ctx, state);
 
         if let Some(diff) = state.projection_ms {
-            Self::draw_ui_projection(&painter, center, &mut ctx, diff);
+            Self::draw_ui_projection(&mut ctx, diff);
         }
 
         if let Some(best) = &state.best_lap {
-            Self::draw_ui_best_lap(&painter, center, &mut ctx, best);
+            Self::draw_ui_best_lap(&mut ctx, best);
         }
 
-        Self::draw_ui_previous_laps(&painter, center, &mut ctx, &state.previous_laps);
+        Self::draw_ui_previous_laps(&mut ctx, &state.previous_laps);
     }
 
     fn render_skia(
@@ -277,37 +240,28 @@ impl OverlayImpl for AdvancedLapTimer {
         let font_opt = Font::try_from_bytes(font_data as &[u8]);
 
         if let Some(font) = &font_opt {
-            let mut ctx = DrawContext {
-                el,
-                y_offset: 0.0,
-                line_height: 24.0 * el.scale * res_scale,
-            };
-
-            Self::draw_skia_current_time(
-                pixmap, font, center_x, center_y, res_scale, &mut ctx, state,
-            );
-
-            if let Some(diff) = state.projection_ms {
-                Self::draw_skia_projection(
-                    pixmap, font, center_x, center_y, res_scale, &mut ctx, diff,
-                );
-            }
-
-            if let Some(best) = &state.best_lap {
-                Self::draw_skia_best_lap(
-                    pixmap, font, center_x, center_y, res_scale, &mut ctx, best,
-                );
-            }
-
-            Self::draw_skia_previous_laps(
+            let mut ctx = SkiaDrawContext {
                 pixmap,
                 font,
                 center_x,
                 center_y,
                 res_scale,
-                &mut ctx,
-                &state.previous_laps,
-            );
+                el,
+                y_offset: 0.0,
+                line_height: 24.0 * el.scale * res_scale,
+            };
+
+            Self::draw_skia_current_time(&mut ctx, state);
+
+            if let Some(diff) = state.projection_ms {
+                Self::draw_skia_projection(&mut ctx, diff);
+            }
+
+            if let Some(best) = &state.best_lap {
+                Self::draw_skia_best_lap(&mut ctx, best);
+            }
+
+            Self::draw_skia_previous_laps(&mut ctx, &state.previous_laps);
         } else {
             common::draw_text_fallback(
                 pixmap,
