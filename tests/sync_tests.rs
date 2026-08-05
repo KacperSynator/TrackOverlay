@@ -12,6 +12,8 @@ fn create_sample(time_ms: i64, lat: f64, lon: f64, lap_number: Option<u32>) -> T
         lap_number,
         lap_time_ms: None,
         throttle_pct: 0.0,
+        session_distance_m: 0.0,
+        lap_distance_m: 0.0,
     }
 }
 

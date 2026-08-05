@@ -14,6 +14,7 @@ A desktop app that overlays TrackAddict CSV telemetry (speed, g-force, lap time,
 - **Speed Readout**
 - **G-Force Meter** (Friction circle)
 - **Lap Timer**
+- **Advanced Lap Timer** (shows current, best, history, and live projection)
 - **Track Map** (Driven path visualization)
 - **Throttle Bar**
 

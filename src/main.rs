@@ -390,6 +390,7 @@ impl MyApp {
 
                 ui.separator();
                 ui.label("Layout Editor");
+
                 for el in self.config.elements.iter_mut() {
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut el.enabled, format!("{:?}", el.kind));
@@ -569,17 +570,23 @@ impl MyApp {
                 );
             }
 
-            let sample = self
-                .telemetry
-                .as_ref()
-                .and_then(|log| log.sample_at(self.playhead_ms + self.config.sync.offset_ms));
+            let state = if let Some(log) = &self.telemetry {
+                log.get_state(self.playhead_ms + self.config.sync.offset_ms)
+            } else {
+                track_overlay::telemetry::TelemetryState {
+                    current_sample: None,
+                    previous_laps: vec![],
+                    best_lap: None,
+                    projection_ms: None,
+                }
+            };
 
             // Bind the telemetry overlay rendering entirely to the draw_rect of the video stream
             render_overlay(
                 ui,
                 draw_rect,
                 &mut self.config.elements,
-                sample.as_ref(),
+                &state,
                 self.trackmap.as_ref(),
                 false,
             );

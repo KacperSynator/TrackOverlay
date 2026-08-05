@@ -1,6 +1,6 @@
 use crate::overlay::{OverlayImpl, common};
 use crate::project::OverlayElement;
-use crate::telemetry::TelemetrySample;
+use crate::telemetry::TelemetryState;
 use crate::trackmap::TrackMap;
 use eframe::egui;
 use rusttype::Font;
@@ -14,7 +14,7 @@ impl OverlayImpl for LapTimer {
         ui: &mut egui::Ui,
         rect: egui::Rect,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
     ) {
         let painter = ui.painter_at(rect);
@@ -23,7 +23,7 @@ impl OverlayImpl for LapTimer {
             rect.top() + el.y * rect.height(),
         );
 
-        let text = common::get_lap_timer_text(sample);
+        let text = common::get_lap_timer_text(state.current_sample.as_ref());
 
         painter.text(
             center,
@@ -38,7 +38,7 @@ impl OverlayImpl for LapTimer {
         &self,
         pixmap: &mut PixmapMut,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
     ) {
         let width = pixmap.width() as f32;
@@ -50,7 +50,7 @@ impl OverlayImpl for LapTimer {
         let font_data = include_bytes!("../font.ttf");
         let font_opt = Font::try_from_bytes(font_data as &[u8]);
 
-        let text = common::get_lap_timer_text(sample);
+        let text = common::get_lap_timer_text(state.current_sample.as_ref());
         if let Some(font) = &font_opt {
             common::draw_text(
                 pixmap,

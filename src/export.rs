@@ -222,11 +222,11 @@ pub fn export_video(
                     let pts_ms = decoded.pts().unwrap_or(0) as f64 * time_base.numerator() as f64
                         / time_base.denominator() as f64
                         * 1000.0;
-                    let sample = telemetry.sample_at(pts_ms as i64 + config.sync.offset_ms);
+                    let state = telemetry.get_state(pts_ms as i64 + config.sync.offset_ms);
                     crate::overlay::render_overlay_skia(
                         &mut pixmap,
                         &config.elements,
-                        sample.as_ref(),
+                        &state,
                         trackmap.as_ref(),
                     );
                 }
@@ -287,13 +287,8 @@ pub fn export_video(
             let pts_ms = decoded.pts().unwrap_or(0) as f64 * time_base.numerator() as f64
                 / time_base.denominator() as f64
                 * 1000.0;
-            let sample = telemetry.sample_at(pts_ms as i64 + config.sync.offset_ms);
-            crate::overlay::render_overlay_skia(
-                &mut pixmap,
-                &config.elements,
-                sample.as_ref(),
-                None,
-            );
+            let state = telemetry.get_state(pts_ms as i64 + config.sync.offset_ms);
+            crate::overlay::render_overlay_skia(&mut pixmap, &config.elements, &state, None);
         }
 
         for y in 0..h as usize {

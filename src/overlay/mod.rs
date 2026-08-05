@@ -1,9 +1,10 @@
 use crate::project::{OverlayElement, OverlayKind};
-use crate::telemetry::TelemetrySample;
+use crate::telemetry::TelemetryState;
 use crate::trackmap::TrackMap;
 use eframe::egui;
 use tiny_skia::PixmapMut;
 
+pub mod advanced_lap_timer;
 pub mod common;
 pub mod gforce_meter;
 pub mod lap_timer;
@@ -17,14 +18,14 @@ pub trait OverlayImpl {
         ui: &mut egui::Ui,
         rect: egui::Rect,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         trackmap: Option<&TrackMap>,
     );
     fn render_skia(
         &self,
         pixmap: &mut PixmapMut,
         el: &OverlayElement,
-        sample: Option<&TelemetrySample>,
+        state: &TelemetryState,
         trackmap: Option<&TrackMap>,
     );
 }
@@ -34,6 +35,7 @@ fn get_impl(kind: &OverlayKind) -> Box<dyn OverlayImpl> {
         OverlayKind::SpeedReadout => Box::new(speed_readout::SpeedReadout),
         OverlayKind::GForceMeter => Box::new(gforce_meter::GForceMeter),
         OverlayKind::LapTimer => Box::new(lap_timer::LapTimer),
+        OverlayKind::AdvancedLapTimer => Box::new(advanced_lap_timer::AdvancedLapTimer),
         OverlayKind::TrackMap => Box::new(track_map::TrackMapOverlay),
         OverlayKind::ThrottleBar => Box::new(throttle_bar::ThrottleBar),
     }
@@ -43,14 +45,14 @@ pub fn render_overlay(
     ui: &mut egui::Ui,
     rect: egui::Rect,
     elements: &mut [OverlayElement],
-    sample: Option<&TelemetrySample>,
+    state: &TelemetryState,
     trackmap: Option<&TrackMap>,
     _is_dragging: bool,
 ) {
     for el in elements.iter_mut() {
         if el.enabled {
             let implementation = get_impl(&el.kind);
-            implementation.render_ui(ui, rect, el, sample, trackmap);
+            implementation.render_ui(ui, rect, el, state, trackmap);
         }
     }
 }
@@ -58,13 +60,13 @@ pub fn render_overlay(
 pub fn render_overlay_skia(
     pixmap: &mut PixmapMut,
     elements: &[OverlayElement],
-    sample: Option<&TelemetrySample>,
+    state: &TelemetryState,
     trackmap: Option<&TrackMap>,
 ) {
     for el in elements.iter() {
         if el.enabled {
             let implementation = get_impl(&el.kind);
-            implementation.render_skia(pixmap, el, sample, trackmap);
+            implementation.render_skia(pixmap, el, state, trackmap);
         }
     }
 }
@@ -100,7 +102,13 @@ mod tests {
 
         let elements = create_test_elements();
 
-        render_overlay_skia(&mut pixmap, &elements, None, None);
+        let state = crate::telemetry::TelemetryState {
+            current_sample: None,
+            previous_laps: vec![],
+            best_lap: None,
+            projection_ms: None,
+        };
+        render_overlay_skia(&mut pixmap, &elements, &state, None);
     }
 
     #[test]
@@ -111,7 +119,13 @@ mod tests {
         let _ = ctx.run_ui(egui::RawInput::default(), |ctx| {
             egui::CentralPanel::default().show_inside(ctx, |ui| {
                 let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
-                render_overlay(ui, rect, &mut elements, None, None, false);
+                let state = crate::telemetry::TelemetryState {
+                    current_sample: None,
+                    previous_laps: vec![],
+                    best_lap: None,
+                    projection_ms: None,
+                };
+                render_overlay(ui, rect, &mut elements, &state, None, false);
             });
         });
     }

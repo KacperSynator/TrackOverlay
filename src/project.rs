@@ -6,6 +6,7 @@ pub enum OverlayKind {
     SpeedReadout,
     GForceMeter,
     LapTimer,
+    AdvancedLapTimer,
     TrackMap,
     ThrottleBar,
 }
