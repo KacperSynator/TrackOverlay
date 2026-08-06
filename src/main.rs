@@ -600,7 +600,11 @@ impl MyApp {
                     self.config.export_end_ms,
                     self.config.sync.offset_ms,
                 );
-                view.get_state(self.playhead_ms + self.config.sync.offset_ms)
+                // The telemetry viewer expects absolute telemetry time to evaluate states against.
+                // However, playhead_ms tracks video time. Therefore, to match telemetry time,
+                // we add the sync offset to the playhead video time.
+                let telemetry_time_ms = self.playhead_ms + self.config.sync.offset_ms;
+                view.get_state(telemetry_time_ms)
             } else {
                 track_overlay::telemetry::TelemetryState {
                     current_sample: None,

@@ -227,14 +227,19 @@ impl<'a> TelemetryView<'a> {
         let end = if end < 0 { i64::MAX } else { end };
 
         // Find the indices that fall within the specified export range.
+        // Convert video timestamps back to telemetry time domain for the search.
+        let start_telem_time = start + sync_offset_ms;
+        // Don't shift i64::MAX to prevent overflow logic breaking
+        let end_telem_time = if end == i64::MAX { i64::MAX } else { end + sync_offset_ms };
+
         let start_idx = log
             .samples
-            .binary_search_by_key(&start, |s| s.time_ms - sync_offset_ms)
+            .binary_search_by_key(&start_telem_time, |s| s.time_ms)
             .unwrap_or_else(|idx| idx);
 
         let end_idx = log
             .samples
-            .binary_search_by_key(&end, |s| s.time_ms - sync_offset_ms)
+            .binary_search_by_key(&end_telem_time, |s| s.time_ms)
             .unwrap_or_else(|idx| idx);
 
         let start_idx = start_idx.min(log.samples.len());
