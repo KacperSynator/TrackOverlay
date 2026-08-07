@@ -268,19 +268,25 @@ impl MyApp {
 
                 ui.horizontal(|ui| {
                     let mut start_sec = self.config.export_start_ms.unwrap_or(0) as f64 / 1000.0;
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut start_sec)
-                                .speed(0.1)
-                                .prefix("Start: ")
-                                .custom_parser(parse_time_str)
-                                .custom_formatter(|n, _| format_time_str(n)),
-                        )
-                        .changed()
+                    let response = ui.add(
+                        egui::DragValue::new(&mut start_sec)
+                            .speed(0.1)
+                            .prefix("Start: ")
+                            .custom_parser(parse_time_str)
+                            .custom_formatter(|n, _| format_time_str(n)),
+                    );
+
+                    // We only want to trigger the heavy recalculation and commit the value
+                    // when the user is completely done dragging or typing (i.e., loses focus or releases drag)
+                    // Added lost_focus() explicitly as well since egui's text editing interaction finishes there
+                    if response.drag_stopped()
+                        || response.lost_focus()
+                        || (response.changed() && !response.has_focus())
                     {
                         self.config.export_start_ms = Some((start_sec * 1000.0) as i64);
                         needs_telemetry_recalc = true;
                     }
+
                     if ui.button("Jump").clicked() {
                         self.playhead_ms = self.config.export_start_ms.unwrap_or(0);
                     }
@@ -293,15 +299,17 @@ impl MyApp {
                         -1.0
                     };
 
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut end_sec)
-                                .speed(0.1)
-                                .prefix("End: ")
-                                .custom_parser(parse_time_str)
-                                .custom_formatter(|n, _| format_time_str(n)),
-                        )
-                        .changed()
+                    let response = ui.add(
+                        egui::DragValue::new(&mut end_sec)
+                            .speed(0.1)
+                            .prefix("End: ")
+                            .custom_parser(parse_time_str)
+                            .custom_formatter(|n, _| format_time_str(n)),
+                    );
+
+                    if response.drag_stopped()
+                        || response.lost_focus()
+                        || (response.changed() && !response.has_focus())
                     {
                         self.config.export_end_ms = Some(if end_sec >= 0.0 {
                             (end_sec * 1000.0) as i64
@@ -310,6 +318,7 @@ impl MyApp {
                         });
                         needs_telemetry_recalc = true;
                     }
+
                     if ui.button("Jump").clicked() {
                         if let Some(end_val) = self.config.export_end_ms {
                             if end_val >= 0 {
