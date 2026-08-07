@@ -230,7 +230,11 @@ impl<'a> TelemetryView<'a> {
         // Convert video timestamps back to telemetry time domain for the search.
         let start_telem_time = start + sync_offset_ms;
         // Don't shift i64::MAX to prevent overflow logic breaking
-        let end_telem_time = if end == i64::MAX { i64::MAX } else { end + sync_offset_ms };
+        let end_telem_time = if end == i64::MAX {
+            i64::MAX
+        } else {
+            end + sync_offset_ms
+        };
 
         let start_idx = log
             .samples
