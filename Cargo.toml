@@ -31,3 +31,7 @@ tempfile = "3.27.0"
 [[bench]]
 name = "sync_bench"
 harness = false
+
+[[bench]]
+name = "export_pixel_copy_bench"
+harness = false
