@@ -72,7 +72,7 @@ fn main() -> eframe::Result {
     }
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1024.0, 768.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1920.0, 1080.0]),
         ..Default::default()
     };
 
@@ -94,6 +94,8 @@ struct MyApp {
     active_export_progress: Option<Arc<Mutex<track_overlay::export::ExportProgress>>>,
     export_rx: crossbeam_channel::Receiver<anyhow::Result<()>>,
     export_tx: crossbeam_channel::Sender<anyhow::Result<()>>,
+    export_start_was_active: bool,
+    export_end_was_active: bool,
 
     file_dialog: FileDialog,
     dialog_mode: DialogMode,
@@ -158,6 +160,8 @@ impl MyApp {
             active_export_progress: None,
             export_rx: rx,
             export_tx: tx,
+            export_start_was_active: false,
+            export_end_was_active: false,
             file_dialog: fd,
             dialog_mode: DialogMode::None,
             video_player: None,
@@ -264,20 +268,28 @@ impl MyApp {
                 ui.separator();
                 ui.heading("Export Range");
 
+                let mut needs_telemetry_recalc = false;
+
                 ui.horizontal(|ui| {
                     let mut start_sec = self.config.export_start_ms.unwrap_or(0) as f64 / 1000.0;
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut start_sec)
-                                .speed(0.1)
-                                .prefix("Start: ")
-                                .custom_parser(parse_time_str)
-                                .custom_formatter(|n, _| format_time_str(n)),
-                        )
-                        .changed()
-                    {
+                    let response = ui.add(
+                        egui::DragValue::new(&mut start_sec)
+                            .speed(0.1)
+                            .prefix("Start: ")
+                            .custom_parser(parse_time_str)
+                            .custom_formatter(|n, _| format_time_str(n)),
+                    );
+
+                    if response.changed() {
                         self.config.export_start_ms = Some((start_sec * 1000.0) as i64);
                     }
+
+                    let is_active = response.has_focus() || response.dragged();
+                    if self.export_start_was_active && !is_active {
+                        needs_telemetry_recalc = true;
+                    }
+                    self.export_start_was_active = is_active;
+
                     if ui.button("Jump").clicked() {
                         self.playhead_ms = self.config.export_start_ms.unwrap_or(0);
                     }
@@ -290,22 +302,28 @@ impl MyApp {
                         -1.0
                     };
 
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut end_sec)
-                                .speed(0.1)
-                                .prefix("End: ")
-                                .custom_parser(parse_time_str)
-                                .custom_formatter(|n, _| format_time_str(n)),
-                        )
-                        .changed()
-                    {
-                        self.config.export_end_ms = Some(if end_sec >= 0.0 {
-                            (end_sec * 1000.0) as i64
+                    let response = ui.add(
+                        egui::DragValue::new(&mut end_sec)
+                            .speed(0.1)
+                            .prefix("End: ")
+                            .custom_parser(parse_time_str)
+                            .custom_formatter(|n, _| format_time_str(n)),
+                    );
+
+                    if response.changed() {
+                        self.config.export_end_ms = if end_sec < 0.0 {
+                            Some(-1)
                         } else {
-                            -1
-                        });
+                            Some((end_sec * 1000.0) as i64)
+                        };
                     }
+                    let end_active = response.has_focus() || response.dragged();
+                    if self.export_end_was_active && !end_active {
+                        needs_telemetry_recalc = true;
+                    }
+
+                    self.export_end_was_active = end_active;
+
                     if ui.button("Jump").clicked() {
                         if let Some(end_val) = self.config.export_end_ms {
                             if end_val >= 0 {
@@ -368,6 +386,7 @@ impl MyApp {
                         {
                             self.config.sync.offset_ms = offset;
                             done = true;
+                            needs_telemetry_recalc = true;
                         }
                         if done {
                             self.auto_sync_progress = None;
@@ -382,10 +401,19 @@ impl MyApp {
                         self.config.sync.offset_ms
                     ));
                 } else {
-                    ui.add(
-                        egui::Slider::new(&mut self.config.sync.offset_ms, -120000..=120000)
-                            .text("Sync Offset (ms)"),
-                    );
+                    if ui
+                        .add(
+                            egui::Slider::new(&mut self.config.sync.offset_ms, -120000..=120000)
+                                .text("Sync Offset (ms)"),
+                        )
+                        .changed()
+                    {
+                        needs_telemetry_recalc = true;
+                    }
+                }
+
+                if needs_telemetry_recalc {
+                    self.recalculate_telemetry();
                 }
 
                 ui.separator();
@@ -414,6 +442,26 @@ impl MyApp {
         });
     }
 
+    fn recalculate_telemetry(&mut self) {
+        if let Some(log) = &self.telemetry {
+            let view = track_overlay::telemetry::TelemetryView::new(
+                log,
+                self.config.export_start_ms,
+                self.config.export_end_ms,
+                self.config.sync.offset_ms,
+            );
+
+            self.telemetry_laps = view.extract_laps();
+
+            // Rebuild a temporary TelemetryLog for trackmap creation since from_telemetry requires it currently
+            let temp_log = TelemetryLog {
+                samples: view.samples.to_vec(),
+                start_time_utc: view.start_time_utc,
+            };
+            self.trackmap = TrackMap::from_telemetry(&temp_log, &self.telemetry_laps);
+        }
+    }
+
     fn handle_dialogs(&mut self, ctx: &egui::Context) {
         // Update the file dialog
         self.file_dialog.update(ctx);
@@ -440,19 +488,8 @@ impl MyApp {
                 DialogMode::PickTelemetry => {
                     self.config.telemetry_path = path_buf.clone();
                     if let Ok(log) = TelemetryLog::load_csv(&path_buf) {
-                        self.telemetry_laps.clear();
-                        let mut current_lap = None;
-                        for s in &log.samples {
-                            if let Some(lap) = s.lap_number
-                                && Some(lap) != current_lap
-                            {
-                                current_lap = Some(lap);
-                                self.telemetry_laps.push((lap, s.time_ms));
-                            }
-                        }
-
-                        self.trackmap = TrackMap::from_telemetry(&log, &self.telemetry_laps);
                         self.telemetry = Some(log);
+                        self.recalculate_telemetry();
                     }
                 }
                 DialogMode::PickExportOutput => {
@@ -571,7 +608,17 @@ impl MyApp {
             }
 
             let state = if let Some(log) = &self.telemetry {
-                log.get_state(self.playhead_ms + self.config.sync.offset_ms)
+                let view = track_overlay::telemetry::TelemetryView::new(
+                    log,
+                    self.config.export_start_ms,
+                    self.config.export_end_ms,
+                    self.config.sync.offset_ms,
+                );
+                // The telemetry viewer expects absolute telemetry time to evaluate states against.
+                // However, playhead_ms tracks video time. Therefore, to match telemetry time,
+                // we add the sync offset to the playhead video time.
+                let telemetry_time_ms = self.playhead_ms + self.config.sync.offset_ms;
+                view.get_state(telemetry_time_ms)
             } else {
                 track_overlay::telemetry::TelemetryState {
                     current_sample: None,

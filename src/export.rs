@@ -91,26 +91,21 @@ pub fn export_video(
     let mut rgba_frame = ffmpeg::frame::Video::empty();
     let mut yuv_frame = ffmpeg::frame::Video::empty();
 
-    // Filter telemetry to only include the exported time range for the trackmap
-    let filtered_telemetry = if config.export_start_ms.is_some() || config.export_end_ms.is_some() {
-        let start = config.export_start_ms.unwrap_or(0);
-        let end = config.export_end_ms.unwrap_or(i64::MAX);
-        let end = if end < 0 { i64::MAX } else { end };
-
-        let mut t = telemetry.clone();
-        t.samples.retain(|s| {
-            let sync_time = s.time_ms - config.sync.offset_ms;
-            sync_time >= start && sync_time <= end
-        });
-        t
-    } else {
-        telemetry.clone()
-    };
-
-    let trackmap = crate::trackmap::TrackMap::from_telemetry(
-        &filtered_telemetry,
-        &filtered_telemetry.extract_laps(),
+    // Create telemetry view to handle bounding and laps cleanly
+    let telemetry_view = crate::telemetry::TelemetryView::new(
+        telemetry,
+        config.export_start_ms,
+        config.export_end_ms,
+        config.sync.offset_ms,
     );
+
+    // Build a temporary TelemetryLog to generate trackmap correctly
+    let temp_log = crate::telemetry::TelemetryLog {
+        samples: telemetry_view.samples.to_vec(),
+        start_time_utc: telemetry_view.start_time_utc,
+    };
+    let trackmap =
+        crate::trackmap::TrackMap::from_telemetry(&temp_log, &telemetry_view.extract_laps());
 
     let total_frames = if input_stream.frames() > 0 {
         input_stream.frames() as usize
@@ -222,7 +217,7 @@ pub fn export_video(
                     let pts_ms = decoded.pts().unwrap_or(0) as f64 * time_base.numerator() as f64
                         / time_base.denominator() as f64
                         * 1000.0;
-                    let state = telemetry.get_state(pts_ms as i64 + config.sync.offset_ms);
+                    let state = telemetry_view.get_state(pts_ms as i64 + config.sync.offset_ms);
                     crate::overlay::render_overlay_skia(
                         &mut pixmap,
                         &config.elements,
@@ -287,8 +282,13 @@ pub fn export_video(
             let pts_ms = decoded.pts().unwrap_or(0) as f64 * time_base.numerator() as f64
                 / time_base.denominator() as f64
                 * 1000.0;
-            let state = telemetry.get_state(pts_ms as i64 + config.sync.offset_ms);
-            crate::overlay::render_overlay_skia(&mut pixmap, &config.elements, &state, None);
+            let state = telemetry_view.get_state(pts_ms as i64 + config.sync.offset_ms);
+            crate::overlay::render_overlay_skia(
+                &mut pixmap,
+                &config.elements,
+                &state,
+                trackmap.as_ref(),
+            );
         }
 
         for y in 0..h as usize {
