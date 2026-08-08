@@ -72,7 +72,7 @@ fn main() -> eframe::Result {
     }
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1024.0, 768.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1920.0, 1080.0]),
         ..Default::default()
     };
 
@@ -94,6 +94,8 @@ struct MyApp {
     active_export_progress: Option<Arc<Mutex<track_overlay::export::ExportProgress>>>,
     export_rx: crossbeam_channel::Receiver<anyhow::Result<()>>,
     export_tx: crossbeam_channel::Sender<anyhow::Result<()>>,
+    export_start_was_active: bool,
+    export_end_was_active: bool,
 
     file_dialog: FileDialog,
     dialog_mode: DialogMode,
@@ -158,6 +160,8 @@ impl MyApp {
             active_export_progress: None,
             export_rx: rx,
             export_tx: tx,
+            export_start_was_active: false,
+            export_end_was_active: false,
             file_dialog: fd,
             dialog_mode: DialogMode::None,
             video_player: None,
@@ -276,16 +280,15 @@ impl MyApp {
                             .custom_formatter(|n, _| format_time_str(n)),
                     );
 
-                    // We only want to trigger the heavy recalculation and commit the value
-                    // when the user is completely done dragging or typing (i.e., loses focus or releases drag)
-                    // Added lost_focus() explicitly as well since egui's text editing interaction finishes there
-                    if response.drag_stopped()
-                        || response.lost_focus()
-                        || (response.changed() && !response.has_focus())
-                    {
+                    if response.changed() {
                         self.config.export_start_ms = Some((start_sec * 1000.0) as i64);
+                    }
+
+                    let is_active = response.has_focus() || response.dragged();
+                    if self.export_start_was_active && !is_active {
                         needs_telemetry_recalc = true;
                     }
+                    self.export_start_was_active = is_active;
 
                     if ui.button("Jump").clicked() {
                         self.playhead_ms = self.config.export_start_ms.unwrap_or(0);
@@ -307,17 +310,19 @@ impl MyApp {
                             .custom_formatter(|n, _| format_time_str(n)),
                     );
 
-                    if response.drag_stopped()
-                        || response.lost_focus()
-                        || (response.changed() && !response.has_focus())
-                    {
-                        self.config.export_end_ms = Some(if end_sec >= 0.0 {
-                            (end_sec * 1000.0) as i64
+                    if response.changed() {
+                        self.config.export_end_ms = if end_sec < 0.0 {
+                            Some(-1)
                         } else {
-                            -1
-                        });
+                            Some((end_sec * 1000.0) as i64)
+                        };
+                    }
+                    let end_active = response.has_focus() || response.dragged();
+                    if self.export_end_was_active && !end_active {
                         needs_telemetry_recalc = true;
                     }
+
+                    self.export_end_was_active = end_active;
 
                     if ui.button("Jump").clicked() {
                         if let Some(end_val) = self.config.export_end_ms {
