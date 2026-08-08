@@ -37,11 +37,9 @@ pub fn render_video_panel(app: &mut MyApp, ui: &mut egui::Ui) {
                 if w > 0 && h > 0 {
                     let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &frame.data);
 
-                    let texture = ui.ctx().load_texture(
-                        "video_frame",
-                        image,
-                        egui::TextureOptions::LINEAR,
-                    );
+                    let texture =
+                        ui.ctx()
+                            .load_texture("video_frame", image, egui::TextureOptions::LINEAR);
                     app.video_texture = Some(texture);
                 }
             }
@@ -138,11 +136,10 @@ pub fn render_video_panel(app: &mut MyApp, ui: &mut egui::Ui) {
                 let remaining = ui.available_width();
                 ui.spacing_mut().slider_width = remaining.max(0.0);
 
-                let slider =
-                    egui::Slider::new(&mut app.playhead_ms, 0..=app.video_duration_ms)
-                        .show_value(false)
-                        .trailing_fill(true)
-                        .clamping(egui::SliderClamping::Edits);
+                let slider = egui::Slider::new(&mut app.playhead_ms, 0..=app.video_duration_ms)
+                    .show_value(false)
+                    .trailing_fill(true)
+                    .clamping(egui::SliderClamping::Edits);
 
                 let response = ui.add(slider);
 
@@ -181,10 +178,8 @@ pub fn render_video_panel(app: &mut MyApp, ui: &mut egui::Ui) {
                     painter.rect_filled(r, 0.0, dim_color);
                 }
                 if end_ms_f < duration {
-                    let r = egui::Rect::from_x_y_ranges(
-                        x_at(end_ms_f)..=rect.right(),
-                        y_range.clone(),
-                    );
+                    let r =
+                        egui::Rect::from_x_y_ranges(x_at(end_ms_f)..=rect.right(), y_range.clone());
                     painter.rect_filled(r, 0.0, dim_color);
                 }
             });

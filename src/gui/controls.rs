@@ -30,7 +30,10 @@ pub fn render_controls_window(app: &mut MyApp, ctx: &egui::Context) {
             });
             if let Some(vp) = &app.video_player {
                 if let Some(dt) = vp.creation_time_utc {
-                    ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+                    ui.label(format!(
+                        "  Timestamp: {}",
+                        dt.format("%Y-%m-%d %H:%M:%S UTC")
+                    ));
                 }
                 ui.label(format!("  Duration: {}s", app.video_duration_ms / 1000));
             }
@@ -53,7 +56,10 @@ pub fn render_controls_window(app: &mut MyApp, ctx: &egui::Context) {
             });
             if let Some(telem) = &app.telemetry {
                 if let Some(dt) = telem.start_time_utc {
-                    ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+                    ui.label(format!(
+                        "  Timestamp: {}",
+                        dt.format("%Y-%m-%d %H:%M:%S UTC")
+                    ));
                 }
                 if !telem.samples.is_empty() {
                     let telem_dur = telem.samples.last().unwrap().time_ms
@@ -69,8 +75,7 @@ pub fn render_controls_window(app: &mut MyApp, ctx: &egui::Context) {
                                 .clicked()
                             {
                                 let target_playhead = start_time - app.config.sync.offset_ms;
-                                if target_playhead >= 0
-                                    && target_playhead <= app.video_duration_ms
+                                if target_playhead >= 0 && target_playhead <= app.video_duration_ms
                                 {
                                     app.playhead_ms = target_playhead;
                                 }

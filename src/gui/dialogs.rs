@@ -51,8 +51,7 @@ pub fn handle_dialogs(app: &mut MyApp, ctx: &egui::Context) {
 
                 app.export_progress = Some(format!("Exporting to {:?}...", path_buf));
 
-                let progress_arc =
-                    Arc::new(Mutex::new(crate::export::ExportProgress::default()));
+                let progress_arc = Arc::new(Mutex::new(crate::export::ExportProgress::default()));
                 app.active_export_progress = Some(progress_arc.clone());
                 let path_clone = path_buf.clone();
                 let tx = app.export_tx.clone();
