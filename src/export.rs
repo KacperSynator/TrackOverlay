@@ -135,6 +135,7 @@ pub fn export_video(
 
     let mut finished = false;
     let mut first_pts: Option<i64> = None;
+    let mut packed_data = Vec::new();
 
     for (stream, packet) in input_ctx.packets() {
         if finished {
@@ -188,7 +189,7 @@ pub fn export_video(
                 let stride = rgba_frame.stride(0);
                 let raw_data = rgba_frame.data_mut(0);
 
-                let mut packed_data = vec![0u8; (w * h * 4) as usize];
+                packed_data.resize((w * h * 4) as usize, 0);
                 for y in 0..h as usize {
                     let src_y = if config.flip_vertical {
                         (h as usize - 1) - y
@@ -270,7 +271,7 @@ pub fn export_video(
         let stride = rgba_frame.stride(0);
         let raw_data = rgba_frame.data_mut(0);
 
-        let mut packed_data = vec![0u8; (w * h * 4) as usize];
+        packed_data.resize((w * h * 4) as usize, 0);
         for y in 0..h as usize {
             let src_start = y * stride;
             let dst_start = y * (w * 4) as usize;
