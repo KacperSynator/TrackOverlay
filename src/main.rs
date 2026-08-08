@@ -179,6 +179,18 @@ impl MyApp {
         format!("{:02}:{:02}", minutes, seconds)
     }
 
+    fn clamp_playhead_to_trim(&mut self) {
+        let start_ms = self.config.export_start_ms.unwrap_or(0);
+        let end_ms = match self.config.export_end_ms {
+            Some(e) if e >= 0 => e,
+            _ => self.video_duration_ms,
+        };
+
+        if start_ms <= end_ms {
+            self.playhead_ms = self.playhead_ms.clamp(start_ms, end_ms);
+        }
+    }
+
     fn render_controls_window(&mut self, ctx: &egui::Context) {
         egui::Window::new("Controls").show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -282,6 +294,7 @@ impl MyApp {
 
                     if response.changed() {
                         self.config.export_start_ms = Some((start_sec * 1000.0) as i64);
+                        self.clamp_playhead_to_trim();
                     }
 
                     let is_active = response.has_focus() || response.dragged();
@@ -316,6 +329,8 @@ impl MyApp {
                         } else {
                             Some((end_sec * 1000.0) as i64)
                         };
+
+                        self.clamp_playhead_to_trim();
                     }
                     let end_active = response.has_focus() || response.dragged();
                     if self.export_end_was_active && !end_active {
@@ -659,11 +674,58 @@ impl MyApp {
                         Self::format_time(self.video_duration_ms)
                     ));
 
+                    let remaining = ui.available_width();
+                    ui.spacing_mut().slider_width = remaining.max(0.0);
+
                     let slider =
                         egui::Slider::new(&mut self.playhead_ms, 0..=self.video_duration_ms)
                             .show_value(false)
-                            .trailing_fill(true);
-                    ui.add_sized(ui.available_size(), slider);
+                            .trailing_fill(true)
+                            .clamping(egui::SliderClamping::Edits);
+
+                    let response = ui.add(slider);
+
+                    let rect = response.rect;
+                    let duration = self.video_duration_ms.max(1) as f32;
+
+                    let start_ms = self.config.export_start_ms.unwrap_or(0);
+                    let end_ms = match self.config.export_end_ms {
+                        Some(e) if e >= 0 => e,
+                        _ => self.video_duration_ms,
+                    };
+
+                    // Clamp the playhead itself whenever the user drags/clicks the slider,
+                    // so it can't land inside the trimmed-out (red) regions.
+                    if response.dragged() || response.changed() {
+                        self.playhead_ms = self.playhead_ms.clamp(start_ms, end_ms);
+                    }
+
+                    // --- visual overlay (as before, using f32 versions) ---
+                    let start_ms_f = start_ms as f32;
+                    let end_ms_f = end_ms as f32;
+
+                    let x_at = |ms: f32| -> f32 {
+                        egui::remap_clamp(ms, 0.0..=duration, rect.left()..=rect.right())
+                    };
+
+                    let painter = ui.painter();
+                    let dim_color = egui::Color32::from_rgba_unmultiplied(200, 40, 40, 90);
+                    let y_range = rect.top()..=rect.bottom();
+
+                    if start_ms_f > 0.0 {
+                        let r = egui::Rect::from_x_y_ranges(
+                            rect.left()..=x_at(start_ms_f),
+                            y_range.clone(),
+                        );
+                        painter.rect_filled(r, 0.0, dim_color);
+                    }
+                    if end_ms_f < duration {
+                        let r = egui::Rect::from_x_y_ranges(
+                            x_at(end_ms_f)..=rect.right(),
+                            y_range.clone(),
+                        );
+                        painter.rect_filled(r, 0.0, dim_color);
+                    }
                 });
             });
         });
@@ -699,10 +761,17 @@ impl eframe::App for MyApp {
         if self.is_playing {
             let dt = ctx.input(|i| i.stable_dt);
             self.playhead_ms += (dt * 1000.0) as i64;
-            if self.playhead_ms > self.video_duration_ms {
-                self.playhead_ms = self.video_duration_ms;
+
+            let end_ms = match self.config.export_end_ms {
+                Some(e) if e >= 0 => e,
+                _ => self.video_duration_ms,
+            };
+
+            if self.playhead_ms >= end_ms {
+                self.playhead_ms = end_ms;
                 self.is_playing = false;
             }
+
             ctx.request_repaint();
         }
 
