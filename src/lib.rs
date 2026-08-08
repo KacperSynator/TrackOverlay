@@ -1,5 +1,7 @@
+pub mod app;
 pub mod export;
 pub mod gpmf_extract;
+pub mod gui;
 pub mod overlay;
 pub mod project;
 pub mod sync;

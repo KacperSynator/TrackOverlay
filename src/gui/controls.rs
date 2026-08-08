@@ -1,0 +1,263 @@
+use eframe::egui;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
+use crate::app::{DialogMode, MyApp};
+use crate::gpmf_extract::extract_gopro_gps;
+use crate::gui::common::{format_time_str, parse_time_str};
+use crate::project::SyncMode;
+use crate::sync::auto_correlate_gps;
+use crate::telemetry::TelemetryLog;
+
+pub fn render_controls_window(app: &mut MyApp, ctx: &egui::Context) {
+    egui::Window::new("Controls").show(ctx, |ui| {
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.heading("Project Files");
+
+            ui.horizontal(|ui| {
+                if ui.button("Load Video").clicked() {
+                    app.dialog_mode = DialogMode::PickVideo;
+                    app.file_dialog.pick_file();
+                }
+                ui.label(
+                    app.config
+                        .video_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .as_ref(),
+                );
+            });
+            if let Some(vp) = &app.video_player {
+                if let Some(dt) = vp.creation_time_utc {
+                    ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+                }
+                ui.label(format!("  Duration: {}s", app.video_duration_ms / 1000));
+            }
+
+            ui.add_space(10.0);
+
+            ui.horizontal(|ui| {
+                if ui.button("Load Telemetry").clicked() {
+                    app.dialog_mode = DialogMode::PickTelemetry;
+                    app.file_dialog.pick_file();
+                }
+                ui.label(
+                    app.config
+                        .telemetry_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .as_ref(),
+                );
+            });
+            if let Some(telem) = &app.telemetry {
+                if let Some(dt) = telem.start_time_utc {
+                    ui.label(format!("  Timestamp: {}", dt.format("%Y-%m-%d %H:%M:%S UTC")));
+                }
+                if !telem.samples.is_empty() {
+                    let telem_dur = telem.samples.last().unwrap().time_ms
+                        - telem.samples.first().unwrap().time_ms;
+                    ui.label(format!("  Data Length: {}s", telem_dur / 1000));
+                }
+
+                if !app.telemetry_laps.is_empty() {
+                    ui.collapsing("Laps", |ui| {
+                        for (lap_num, start_time) in &app.telemetry_laps {
+                            if ui
+                                .button(format!("Jump to Lap {} ({}s)", lap_num, start_time / 1000))
+                                .clicked()
+                            {
+                                let target_playhead = start_time - app.config.sync.offset_ms;
+                                if target_playhead >= 0
+                                    && target_playhead <= app.video_duration_ms
+                                {
+                                    app.playhead_ms = target_playhead;
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+
+            ui.separator();
+            ui.heading("Settings");
+            ui.checkbox(&mut app.config.flip_vertical, "Flip Video Vertically");
+            ui.checkbox(&mut app.config.flip_horizontal, "Flip Video Horizontally");
+
+            ui.separator();
+            ui.heading("Export Range");
+
+            let mut needs_telemetry_recalc = false;
+
+            ui.horizontal(|ui| {
+                let mut start_sec = app.config.export_start_ms.unwrap_or(0) as f64 / 1000.0;
+                let response = ui.add(
+                    egui::DragValue::new(&mut start_sec)
+                        .speed(0.1)
+                        .prefix("Start: ")
+                        .custom_parser(parse_time_str)
+                        .custom_formatter(|n, _| format_time_str(n)),
+                );
+
+                if response.changed() {
+                    app.config.export_start_ms = Some((start_sec * 1000.0) as i64);
+                    app.clamp_playhead_to_trim();
+                }
+
+                let is_active = response.has_focus() || response.dragged();
+                if app.export_start_was_active && !is_active {
+                    needs_telemetry_recalc = true;
+                }
+                app.export_start_was_active = is_active;
+
+                if ui.button("Jump").clicked() {
+                    app.playhead_ms = app.config.export_start_ms.unwrap_or(0);
+                }
+            });
+
+            ui.horizontal(|ui| {
+                let mut end_sec = if let Some(ms) = app.config.export_end_ms {
+                    if ms >= 0 { ms as f64 / 1000.0 } else { -1.0 }
+                } else {
+                    -1.0
+                };
+
+                let response = ui.add(
+                    egui::DragValue::new(&mut end_sec)
+                        .speed(0.1)
+                        .prefix("End: ")
+                        .custom_parser(parse_time_str)
+                        .custom_formatter(|n, _| format_time_str(n)),
+                );
+
+                if response.changed() {
+                    app.config.export_end_ms = if end_sec < 0.0 {
+                        Some(-1)
+                    } else {
+                        Some((end_sec * 1000.0) as i64)
+                    };
+
+                    app.clamp_playhead_to_trim();
+                }
+                let end_active = response.has_focus() || response.dragged();
+                if app.export_end_was_active && !end_active {
+                    needs_telemetry_recalc = true;
+                }
+
+                app.export_end_was_active = end_active;
+
+                if ui.button("Jump").clicked() {
+                    if let Some(end_val) = app.config.export_end_ms {
+                        if end_val >= 0 {
+                            app.playhead_ms = end_val;
+                        } else {
+                            app.playhead_ms = app.video_duration_ms;
+                        }
+                    } else {
+                        app.playhead_ms = app.video_duration_ms;
+                    }
+                }
+                ui.label("(-1 for end)");
+            });
+
+            ui.separator();
+            ui.heading("Sync");
+
+            ui.horizontal(|ui| {
+                ui.radio_value(&mut app.config.sync.mode, SyncMode::Manual, "Manual Sync");
+                ui.radio_value(&mut app.config.sync.mode, SyncMode::Auto, "Auto Sync");
+            });
+
+            if app.config.sync.mode == SyncMode::Auto {
+                if app.auto_sync_progress.is_none() {
+                    if ui.button("Run Auto-Sync").clicked() {
+                        let progress = Arc::new(Mutex::new(None));
+                        app.auto_sync_progress = Some(progress.clone());
+
+                        let video_path = app.config.video_path.to_string_lossy().to_string();
+                        let telem_clone = if let Some(t) = &app.telemetry {
+                            TelemetryLog {
+                                samples: t.samples.clone(),
+                                start_time_utc: t.start_time_utc,
+                            }
+                        } else {
+                            TelemetryLog {
+                                samples: vec![],
+                                start_time_utc: None,
+                            }
+                        };
+                        let max_auto_sync_offset_ms = app.config.sync.max_auto_sync_offset_ms;
+
+                        thread::spawn(move || {
+                            if let Ok(gps_data) = extract_gopro_gps(&video_path)
+                                && let Some(offset) = auto_correlate_gps(
+                                    &gps_data,
+                                    &telem_clone,
+                                    max_auto_sync_offset_ms,
+                                )
+                                && let Ok(mut lock) = progress.lock()
+                            {
+                                *lock = Some(offset);
+                            }
+                        });
+                    }
+                } else {
+                    let mut done = false;
+                    if let Ok(lock) = app.auto_sync_progress.as_ref().unwrap().lock()
+                        && let Some(offset) = *lock
+                    {
+                        app.config.sync.offset_ms = offset;
+                        done = true;
+                        needs_telemetry_recalc = true;
+                    }
+                    if done {
+                        app.auto_sync_progress = None;
+                    } else {
+                        ui.label("Syncing...");
+                        ui.ctx().request_repaint(); // ensure we re-draw to check progress
+                    }
+                }
+
+                ui.label(format!("Computed offset: {} ms", app.config.sync.offset_ms));
+            } else {
+                if ui
+                    .add(
+                        egui::Slider::new(&mut app.config.sync.offset_ms, -120000..=120000)
+                            .text("Sync Offset (ms)"),
+                    )
+                    .changed()
+                {
+                    needs_telemetry_recalc = true;
+                }
+            }
+
+            if needs_telemetry_recalc {
+                app.recalculate_telemetry();
+            }
+
+            ui.separator();
+            ui.label("Layout Editor");
+
+            for el in app.config.elements.iter_mut() {
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut el.enabled, format!("{:?}", el.kind));
+                    ui.add(egui::Slider::new(&mut el.x, 0.0..=1.0).text("X"));
+                    ui.add(egui::Slider::new(&mut el.y, 0.0..=1.0).text("Y"));
+                    ui.add(egui::Slider::new(&mut el.scale, 0.5..=3.0).text("Scale"));
+                });
+            }
+
+            ui.separator();
+
+            if ui.button("Export Final Video").clicked() {
+                app.dialog_mode = DialogMode::PickExportOutput;
+                app.file_dialog.save_file();
+            }
+
+            if let Some(msg) = &app.export_progress {
+                ui.label(msg);
+            }
+        });
+    });
+}
