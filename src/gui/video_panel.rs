@@ -124,6 +124,31 @@ fn render_bottom_controls(app: &mut MyApp, ui: &mut egui::Ui, control_rect: egui
     });
 }
 
+fn fetch_frame_from_player(app: &mut MyApp, ui: &mut egui::Ui) {
+    if let Some(player) = &mut app.video_player {
+        if app.playhead_ms != app.last_seek_ms {
+            if let Err(e) = player.seek(app.playhead_ms) {
+                warn!("Seek error: {}", e);
+            }
+            app.last_seek_ms = app.playhead_ms;
+        }
+
+        if let Some(frame) = player.get_frame() {
+            let w = frame.width as usize;
+            let h = frame.height as usize;
+
+            if w > 0 && h > 0 {
+                let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &frame.data);
+
+                let texture =
+                    ui.ctx()
+                        .load_texture("video_frame", image, egui::TextureOptions::LINEAR);
+                app.video_texture = Some(texture);
+            }
+        }
+    }
+}
+
 pub fn render_video_panel(app: &mut MyApp, ui: &mut egui::Ui) {
     egui::CentralPanel::default().show_inside(ui, |ui| {
         let rect = ui.available_rect_before_wrap();
@@ -139,29 +164,7 @@ pub fn render_video_panel(app: &mut MyApp, ui: &mut egui::Ui) {
             egui::Color32::from_rgb(20, 20, 20),
         );
 
-        // Fetch frame from video player
-        if let Some(player) = &mut app.video_player {
-            if app.playhead_ms != app.last_seek_ms {
-                if let Err(e) = player.seek(app.playhead_ms) {
-                    warn!("Seek error: {}", e);
-                }
-                app.last_seek_ms = app.playhead_ms;
-            }
-
-            if let Some(frame) = player.get_frame() {
-                let w = frame.width as usize;
-                let h = frame.height as usize;
-
-                if w > 0 && h > 0 {
-                    let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &frame.data);
-
-                    let texture =
-                        ui.ctx()
-                            .load_texture("video_frame", image, egui::TextureOptions::LINEAR);
-                    app.video_texture = Some(texture);
-                }
-            }
-        }
+        fetch_frame_from_player(app, ui);
 
         // By default, assume 16:9
         let mut aspect = 16.0 / 9.0;
