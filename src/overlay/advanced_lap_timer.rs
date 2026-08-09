@@ -290,6 +290,7 @@ mod tests {
             lap_number: Some(2),
             lap_time_ms: Some(150500),
             throttle_pct: 75.0,
+            engine_speed_rpm: 6000.0,
             session_distance_m: 1000.0,
             lap_distance_m: 500.0,
         };
@@ -324,6 +325,7 @@ mod tests {
             x: 0.5,
             y: 0.5,
             scale: 1.0,
+            options: None,
         };
 
         let state = create_test_state();
@@ -351,6 +353,7 @@ mod tests {
             x: 0.5,
             y: 0.5,
             scale: 1.0,
+            options: None,
         };
 
         let state = create_test_state();

@@ -94,6 +94,7 @@ mod tests {
             x: 0.5,
             y: 0.5,
             scale: 1.0,
+            options: None,
         }
     }
 
@@ -108,6 +109,7 @@ mod tests {
             lap_number: Some(2),
             lap_time_ms: Some(150500),
             throttle_pct: 75.0,
+            engine_speed_rpm: 6200.0,
             session_distance_m: 0.0,
             lap_distance_m: 0.0,
         }

@@ -12,7 +12,7 @@ fn create_sample(time_ms: i64, lat: f64, lon: f64, lap_number: Option<u32>) -> T
         accel_lon_g: 0.0,
         lap_number,
         lap_time_ms: None,
-        throttle_pct: 0.0,
+        throttle_pct: 0.0, engine_speed_rpm: 0.0,
         session_distance_m: 0.0,
         lap_distance_m: 0.0,
     }
@@ -93,7 +93,7 @@ fn generate_lissajous_data() -> (Vec<(i64, f64, f64)>, TelemetryLog) {
             accel_lon_g: 0.0,
             lap_number: None, // Ensure fallback is triggered
             lap_time_ms: None,
-            throttle_pct: 100.0,
+            throttle_pct: 100.0, engine_speed_rpm: 0.0,
             session_distance_m: 0.0,
             lap_distance_m: 0.0,
         });

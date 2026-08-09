@@ -138,6 +138,7 @@ pub fn create_test_sample() -> TelemetrySample {
         lap_number: Some(2),
         lap_time_ms: Some(150500),
         throttle_pct: 75.0,
+        engine_speed_rpm: 6200.0,
         session_distance_m: 1000.0,
         lap_distance_m: 500.0,
     }
