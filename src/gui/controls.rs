@@ -9,9 +9,7 @@ use crate::project::SyncMode;
 use crate::sync::auto_correlate_gps;
 use crate::telemetry::TelemetryLog;
 
-fn render_project_files_section(app: &mut MyApp, ui: &mut egui::Ui) {
-    ui.heading("Project Files");
-
+fn render_load_video(app: &mut MyApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         if ui.button("Load Video").clicked() {
             app.dialog_mode = DialogMode::PickVideo;
@@ -35,9 +33,9 @@ fn render_project_files_section(app: &mut MyApp, ui: &mut egui::Ui) {
         }
         ui.label(format!("  Duration: {}s", app.video_duration_ms / 1000));
     }
+}
 
-    ui.add_space(10.0);
-
+fn render_load_telemetry(app: &mut MyApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         if ui.button("Load Telemetry").clicked() {
             app.dialog_mode = DialogMode::PickTelemetry;
@@ -83,17 +81,21 @@ fn render_project_files_section(app: &mut MyApp, ui: &mut egui::Ui) {
     }
 }
 
+fn render_project_files_section(app: &mut MyApp, ui: &mut egui::Ui) {
+    ui.heading("Project Files");
+    render_load_video(app, ui);
+    ui.add_space(10.0);
+    render_load_telemetry(app, ui);
+}
+
 fn render_settings_section(app: &mut MyApp, ui: &mut egui::Ui) {
     ui.heading("Settings");
     ui.checkbox(&mut app.config.flip_vertical, "Flip Video Vertically");
     ui.checkbox(&mut app.config.flip_horizontal, "Flip Video Horizontally");
 }
 
-fn render_export_range_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
-    ui.heading("Export Range");
-
+fn render_export_start(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
     let mut needs_telemetry_recalc = false;
-
     ui.horizontal(|ui| {
         let mut start_sec = app.config.export_start_ms.unwrap_or(0) as f64 / 1000.0;
         let response = ui.add(
@@ -119,7 +121,11 @@ fn render_export_range_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
             app.playhead_ms = app.config.export_start_ms.unwrap_or(0);
         }
     });
+    needs_telemetry_recalc
+}
 
+fn render_export_end(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
+    let mut needs_telemetry_recalc = false;
     ui.horizontal(|ui| {
         let mut end_sec = if let Some(ms) = app.config.export_end_ms {
             if ms >= 0 { ms as f64 / 1000.0 } else { -1.0 }
@@ -164,13 +170,84 @@ fn render_export_range_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
         }
         ui.label("(-1 for end)");
     });
+    needs_telemetry_recalc
+}
 
+fn render_export_range_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
+    ui.heading("Export Range");
+    let needs_telemetry_recalc_start = render_export_start(app, ui);
+    let needs_telemetry_recalc_end = render_export_end(app, ui);
+    needs_telemetry_recalc_start || needs_telemetry_recalc_end
+}
+
+fn render_auto_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
+    let mut needs_telemetry_recalc = false;
+    if app.auto_sync_progress.is_none() {
+        if ui.button("Run Auto-Sync").clicked() {
+            let progress = Arc::new(Mutex::new(None));
+            app.auto_sync_progress = Some(progress.clone());
+
+            let video_path = app.config.video_path.to_string_lossy().to_string();
+            let telem_clone = if let Some(t) = &app.telemetry {
+                TelemetryLog {
+                    samples: t.samples.clone(),
+                    start_time_utc: t.start_time_utc,
+                }
+            } else {
+                TelemetryLog {
+                    samples: vec![],
+                    start_time_utc: None,
+                }
+            };
+            let max_auto_sync_offset_ms = app.config.sync.max_auto_sync_offset_ms;
+
+            thread::spawn(move || {
+                if let Ok(gps_data) = extract_gopro_gps(&video_path)
+                    && let Some(offset) =
+                        auto_correlate_gps(&gps_data, &telem_clone, max_auto_sync_offset_ms)
+                    && let Ok(mut lock) = progress.lock()
+                {
+                    *lock = Some(offset);
+                }
+            });
+        }
+    } else {
+        let mut done = false;
+        if let Ok(lock) = app.auto_sync_progress.as_ref().unwrap().lock()
+            && let Some(offset) = *lock
+        {
+            app.config.sync.offset_ms = offset;
+            done = true;
+            needs_telemetry_recalc = true;
+        }
+        if done {
+            app.auto_sync_progress = None;
+        } else {
+            ui.label("Syncing...");
+            ui.ctx().request_repaint(); // ensure we re-draw to check progress
+        }
+    }
+
+    ui.label(format!("Computed offset: {} ms", app.config.sync.offset_ms));
+    needs_telemetry_recalc
+}
+
+fn render_manual_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
+    let mut needs_telemetry_recalc = false;
+    if ui
+        .add(
+            egui::Slider::new(&mut app.config.sync.offset_ms, -120000..=120000)
+                .text("Sync Offset (ms)"),
+        )
+        .changed()
+    {
+        needs_telemetry_recalc = true;
+    }
     needs_telemetry_recalc
 }
 
 fn render_sync_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
     ui.heading("Sync");
-    let mut needs_telemetry_recalc = false;
 
     ui.horizontal(|ui| {
         ui.radio_value(&mut app.config.sync.mode, SyncMode::Manual, "Manual Sync");
@@ -178,66 +255,10 @@ fn render_sync_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
     });
 
     if app.config.sync.mode == SyncMode::Auto {
-        if app.auto_sync_progress.is_none() {
-            if ui.button("Run Auto-Sync").clicked() {
-                let progress = Arc::new(Mutex::new(None));
-                app.auto_sync_progress = Some(progress.clone());
-
-                let video_path = app.config.video_path.to_string_lossy().to_string();
-                let telem_clone = if let Some(t) = &app.telemetry {
-                    TelemetryLog {
-                        samples: t.samples.clone(),
-                        start_time_utc: t.start_time_utc,
-                    }
-                } else {
-                    TelemetryLog {
-                        samples: vec![],
-                        start_time_utc: None,
-                    }
-                };
-                let max_auto_sync_offset_ms = app.config.sync.max_auto_sync_offset_ms;
-
-                thread::spawn(move || {
-                    if let Ok(gps_data) = extract_gopro_gps(&video_path)
-                        && let Some(offset) =
-                            auto_correlate_gps(&gps_data, &telem_clone, max_auto_sync_offset_ms)
-                        && let Ok(mut lock) = progress.lock()
-                    {
-                        *lock = Some(offset);
-                    }
-                });
-            }
-        } else {
-            let mut done = false;
-            if let Ok(lock) = app.auto_sync_progress.as_ref().unwrap().lock()
-                && let Some(offset) = *lock
-            {
-                app.config.sync.offset_ms = offset;
-                done = true;
-                needs_telemetry_recalc = true;
-            }
-            if done {
-                app.auto_sync_progress = None;
-            } else {
-                ui.label("Syncing...");
-                ui.ctx().request_repaint(); // ensure we re-draw to check progress
-            }
-        }
-
-        ui.label(format!("Computed offset: {} ms", app.config.sync.offset_ms));
+        render_auto_sync(app, ui)
     } else {
-        if ui
-            .add(
-                egui::Slider::new(&mut app.config.sync.offset_ms, -120000..=120000)
-                    .text("Sync Offset (ms)"),
-            )
-            .changed()
-        {
-            needs_telemetry_recalc = true;
-        }
+        render_manual_sync(app, ui)
     }
-
-    needs_telemetry_recalc
 }
 
 fn render_layout_editor_section(app: &mut MyApp, ui: &mut egui::Ui) {
