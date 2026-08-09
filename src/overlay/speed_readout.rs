@@ -3,7 +3,6 @@ use crate::project::OverlayElement;
 use crate::telemetry::TelemetryState;
 use crate::trackmap::TrackMap;
 use eframe::egui;
-use rusttype::Font;
 use tiny_skia::{Color, PixmapMut};
 
 pub struct SpeedReadout;
@@ -39,6 +38,7 @@ impl OverlayImpl for SpeedReadout {
         el: &OverlayElement,
         state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
+        font_opt: Option<&rusttype::Font>,
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
@@ -46,11 +46,8 @@ impl OverlayImpl for SpeedReadout {
         let center_x = el.x * width;
         let center_y = el.y * height;
 
-        let font_data = include_bytes!("../font.ttf");
-        let font_opt = Font::try_from_bytes(font_data as &[u8]);
-
         let text = common::get_speed_text(state.current_sample.as_ref());
-        if let Some(font) = &font_opt {
+        if let Some(font) = font_opt {
             common::draw_text(
                 pixmap,
                 font,
@@ -105,6 +102,7 @@ mod tests {
                 projection_ms: None,
             },
             None,
+            None,
         );
 
         let sample = crate::overlay::common::create_test_sample();
@@ -117,6 +115,7 @@ mod tests {
                 best_lap: None,
                 projection_ms: None,
             },
+            None,
             None,
         );
     }

@@ -229,6 +229,7 @@ impl OverlayImpl for AdvancedLapTimer {
         el: &OverlayElement,
         state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
+        font_opt: Option<&rusttype::Font>,
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
@@ -236,10 +237,7 @@ impl OverlayImpl for AdvancedLapTimer {
         let center_x = el.x * width;
         let center_y = el.y * height;
 
-        let font_data = include_bytes!("../font.ttf");
-        let font_opt = Font::try_from_bytes(font_data as &[u8]);
-
-        if let Some(font) = &font_opt {
+        if let Some(font) = font_opt {
             let mut ctx = SkiaDrawContext {
                 pixmap,
                 font,
@@ -331,7 +329,7 @@ mod tests {
         let state = create_test_state();
 
         // With font
-        timer.render_skia(&mut pixmap, &el, &state, None);
+        timer.render_skia(&mut pixmap, &el, &state, None, None);
 
         // Ensure it doesn't panic on missing fields
         let empty_state = TelemetryState {
@@ -340,7 +338,7 @@ mod tests {
             best_lap: None,
             projection_ms: None,
         };
-        timer.render_skia(&mut pixmap, &el, &empty_state, None);
+        timer.render_skia(&mut pixmap, &el, &empty_state, None, None);
     }
 
     #[test]

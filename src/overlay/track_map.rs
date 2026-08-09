@@ -78,6 +78,7 @@ impl OverlayImpl for TrackMapOverlay {
         el: &OverlayElement,
         state: &TelemetryState,
         trackmap: Option<&TrackMap>,
+        _font_opt: Option<&rusttype::Font>,
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
@@ -225,6 +226,7 @@ mod tests {
                 projection_ms: None,
             },
             Some(&map),
+            None,
         );
         trackmap_overlay.render_skia(
             &mut pixmap,
@@ -235,6 +237,7 @@ mod tests {
                 best_lap: None,
                 projection_ms: None,
             },
+            None,
             None,
         ); // no map
 
@@ -249,6 +252,7 @@ mod tests {
                 projection_ms: None,
             },
             Some(&map),
+            None,
         );
     }
 
