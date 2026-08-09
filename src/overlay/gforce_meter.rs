@@ -40,6 +40,7 @@ impl OverlayImpl for GForceMeter {
         el: &OverlayElement,
         state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
+        _font_opt: Option<&rusttype::Font>,
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
@@ -129,6 +130,7 @@ mod tests {
                 projection_ms: None,
             },
             None,
+            None,
         );
 
         let sample = create_test_sample();
@@ -141,6 +143,7 @@ mod tests {
                 best_lap: None,
                 projection_ms: None,
             },
+            None,
             None,
         );
     }

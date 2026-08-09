@@ -27,6 +27,7 @@ pub trait OverlayImpl {
         el: &OverlayElement,
         state: &TelemetryState,
         trackmap: Option<&TrackMap>,
+        font_opt: Option<&rusttype::Font>,
     );
 }
 
@@ -63,10 +64,12 @@ pub fn render_overlay_skia(
     state: &TelemetryState,
     trackmap: Option<&TrackMap>,
 ) {
+    let font_data = include_bytes!("../font.ttf");
+    let font_opt = rusttype::Font::try_from_bytes(font_data as &[u8]);
     for el in elements.iter() {
         if el.enabled {
             let implementation = get_impl(&el.kind);
-            implementation.render_skia(pixmap, el, state, trackmap);
+            implementation.render_skia(pixmap, el, state, trackmap, font_opt.as_ref());
         }
     }
 }
