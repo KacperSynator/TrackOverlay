@@ -37,32 +37,7 @@ pub fn auto_correlate_gps(
             let sf_lon = sf_sample.lon;
 
             // 2. Find times in the GoPro trace where the car passes exactly this S/F line
-            let mut gopro_crossings = Vec::new();
-            let mut in_zone = false;
-            let mut local_min_dist = f64::MAX;
-            let mut local_min_time = 0;
-
-            for &(t, lat, lon) in gopro_gps {
-                let dist = haversine(sf_lat, sf_lon, lat, lon);
-
-                // If we get within 30 meters, we are crossing the line
-                if dist < 10.0 {
-                    in_zone = true;
-                    if dist < local_min_dist {
-                        local_min_dist = dist;
-                        local_min_time = t;
-                    }
-                } else if in_zone {
-                    // We left the 30m radius, record the closest moment as the crossing
-                    gopro_crossings.push(local_min_time);
-                    in_zone = false;
-                    local_min_dist = f64::MAX;
-                }
-            }
-            // Catch if we end exactly on the line
-            if in_zone {
-                gopro_crossings.push(local_min_time);
-            }
+            let gopro_crossings = find_gopro_crossings(gopro_gps, sf_lat, sf_lon);
 
             info!(
                 "Detected {} Start/Finish crossings in GoPro GPS track.",
@@ -71,46 +46,9 @@ pub fn auto_correlate_gps(
 
             // 3. Find the offset that matches the highest number of laps between the two arrays
             if !gopro_crossings.is_empty() {
-                let mut best_offset = 0;
-                let mut max_matches = 0;
-                let tolerance_ms = 3000; // 3 seconds tolerance for GPS polling inaccuracies
-
-                for &g_time in &gopro_crossings {
-                    for &(_lap_num, t_time) in &telem_laps {
-                        let potential_offset = t_time - g_time;
-
-                        // Count how many GoPro crossings align with telemetry crossings using this offset
-                        let mut matches = 0;
-                        let mut telem_idx = 0;
-                        for &g_check in &gopro_crossings {
-                            let mapped_time = g_check + potential_offset;
-                            // Advance telem_idx as long as the telemetry time is behind the mapped_time minus tolerance
-                            while telem_idx < telem_laps.len()
-                                && telem_laps[telem_idx].1 < mapped_time - tolerance_ms
-                            {
-                                telem_idx += 1;
-                            }
-
-                            // If the current telemetry time is within tolerance, we found a match
-                            if telem_idx < telem_laps.len()
-                                && telem_laps[telem_idx].1 <= mapped_time + tolerance_ms
-                            {
-                                matches += 1;
-                                // We can increment telem_idx since we matched it, or let it match multiple if they overlap
-                                // It's safer to not consume it entirely in case of very close crossings, but since
-                                // lap times are usually far apart, consuming it is fine. For now we just let the next
-                                // iteration evaluate it again or move past it.
-                            }
-                        }
-
-                        if matches > max_matches {
-                            max_matches = matches;
-                            best_offset = potential_offset;
-                        }
-                    }
-                }
-
-                if max_matches > 0 {
+                if let Some((max_matches, best_offset)) =
+                    match_lap_crossings(&gopro_crossings, &telem_laps)
+                {
                     info!(
                         "Lap-based correlation successful! Found {} matching laps with offset {} ms",
                         max_matches, best_offset
@@ -351,5 +289,81 @@ mod tests {
         let lon = 0.0;
         let dist = haversine(lat, lon, 0.0, 0.0);
         assert!(dist.is_nan(), "Expected NaN distance for NaN input");
+    }
+}
+
+fn find_gopro_crossings(gopro_gps: &[(i64, f64, f64)], sf_lat: f64, sf_lon: f64) -> Vec<i64> {
+    let mut gopro_crossings = Vec::new();
+    let mut in_zone = false;
+    let mut local_min_dist = f64::MAX;
+    let mut local_min_time = 0;
+
+    for &(t, lat, lon) in gopro_gps {
+        let dist = haversine(sf_lat, sf_lon, lat, lon);
+
+        // If we get within 30 meters, we are crossing the line
+        if dist < 10.0 {
+            in_zone = true;
+            if dist < local_min_dist {
+                local_min_dist = dist;
+                local_min_time = t;
+            }
+        } else if in_zone {
+            // We left the 30m radius, record the closest moment as the crossing
+            gopro_crossings.push(local_min_time);
+            in_zone = false;
+            local_min_dist = f64::MAX;
+        }
+    }
+    // Catch if we end exactly on the line
+    if in_zone {
+        gopro_crossings.push(local_min_time);
+    }
+    gopro_crossings
+}
+
+fn match_lap_crossings(gopro_crossings: &[i64], telem_laps: &[(u32, i64)]) -> Option<(usize, i64)> {
+    if gopro_crossings.is_empty() {
+        return None;
+    }
+    let mut best_offset = 0;
+    let mut max_matches = 0;
+    let tolerance_ms = 3000; // 3 seconds tolerance for GPS polling inaccuracies
+
+    for &g_time in gopro_crossings {
+        for &(_lap_num, t_time) in telem_laps {
+            let potential_offset = t_time - g_time;
+
+            // Count how many GoPro crossings align with telemetry crossings using this offset
+            let mut matches = 0;
+            let mut telem_idx = 0;
+            for &g_check in gopro_crossings {
+                let mapped_time = g_check + potential_offset;
+                // Advance telem_idx as long as the telemetry time is behind the mapped_time minus tolerance
+                while telem_idx < telem_laps.len()
+                    && telem_laps[telem_idx].1 < mapped_time - tolerance_ms
+                {
+                    telem_idx += 1;
+                }
+
+                // If the current telemetry time is within tolerance, we found a match
+                if telem_idx < telem_laps.len()
+                    && telem_laps[telem_idx].1 <= mapped_time + tolerance_ms
+                {
+                    matches += 1;
+                }
+            }
+
+            if matches > max_matches {
+                max_matches = matches;
+                best_offset = potential_offset;
+            }
+        }
+    }
+
+    if max_matches > 0 {
+        Some((max_matches, best_offset))
+    } else {
+        None
     }
 }
