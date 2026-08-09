@@ -44,6 +44,28 @@ impl OverlayImpl for RpmOverlay {
         let height = 20.0 * el.scale;
 
         let bg_rect = egui::Rect::from_center_size(center, egui::vec2(max_width, height));
+
+        let max_k = (rpm_max / 1000.0).floor() as i32;
+        for i in 1..=max_k {
+            let ratio = (i as f32 * 1000.0) / rpm_max;
+            let x = bg_rect.left() + ratio * max_width;
+
+            let color = if (i as f32 * 1000.0) >= rpm_redline {
+                egui::Color32::RED
+            } else {
+                egui::Color32::WHITE
+            };
+
+            let text = format!("{}", i);
+            painter.text(
+                egui::pos2(x, bg_rect.top() - 10.0 * el.scale),
+                egui::Align2::CENTER_BOTTOM,
+                text,
+                egui::FontId::proportional(14.0 * el.scale),
+                color,
+            );
+        }
+
         painter.rect_filled(bg_rect, 2.0, egui::Color32::from_black_alpha(150));
         painter.rect_stroke(
             bg_rect,
@@ -81,7 +103,7 @@ impl OverlayImpl for RpmOverlay {
         el: &OverlayElement,
         state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
-        _font_opt: Option<&rusttype::Font>,
+        font_opt: Option<&rusttype::Font>,
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
@@ -112,6 +134,42 @@ impl OverlayImpl for RpmOverlay {
 
         let left = center_x - max_w / 2.0;
         let top = center_y - h / 2.0;
+
+        let max_k = (rpm_max / 1000.0).floor() as i32;
+        for i in 1..=max_k {
+            let ratio = (i as f32 * 1000.0) / rpm_max;
+            let x = left + ratio * max_w;
+
+            let color = if (i as f32 * 1000.0) >= rpm_redline {
+                tiny_skia::Color::from_rgba8(255, 0, 0, 255)
+            } else {
+                tiny_skia::Color::from_rgba8(255, 255, 255, 255)
+            };
+
+            let text = format!("{}", i);
+            let y = top - 8.0 * el.scale * res_scale;
+
+            if let Some(font) = font_opt {
+                crate::overlay::common::draw_text(
+                    pixmap,
+                    font,
+                    &text,
+                    x,
+                    y,
+                    16.0 * el.scale * res_scale,
+                    color,
+                );
+            } else {
+                crate::overlay::common::draw_text_fallback(
+                    pixmap,
+                    x,
+                    y,
+                    10.0 * el.scale * res_scale,
+                    10.0 * el.scale * res_scale,
+                    color,
+                );
+            }
+        }
 
         let bg_rect = Rect::from_xywh(left, top, max_w, h).unwrap();
 
