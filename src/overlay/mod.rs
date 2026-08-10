@@ -30,9 +30,10 @@ pub trait OverlayImpl {
         trackmap: Option<&TrackMap>,
         font_opt: Option<&rusttype::Font>,
     );
+    fn custom_ui(&self, _ui: &mut egui::Ui, _el: &mut OverlayElement) {}
 }
 
-fn get_impl(kind: &OverlayKind) -> Box<dyn OverlayImpl> {
+pub fn get_impl(kind: &OverlayKind) -> Box<dyn OverlayImpl> {
     match kind {
         OverlayKind::SpeedReadout => Box::new(speed_readout::SpeedReadout),
         OverlayKind::GForceMeter => Box::new(gforce_meter::GForceMeter),

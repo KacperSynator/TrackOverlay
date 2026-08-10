@@ -97,6 +97,41 @@ impl OverlayImpl for RpmOverlay {
         }
     }
 
+    fn custom_ui(&self, ui: &mut egui::Ui, el: &mut OverlayElement) {
+        let mut rpm_max = 6500;
+        let mut rpm_redline = 6000;
+        if let Some(opts) = &el.options {
+            if let Some(max_val) = opts.get("rpm_max").and_then(|v| v.as_u64()) {
+                rpm_max = max_val as u32;
+            }
+            if let Some(rl_val) = opts.get("rpm_redline").and_then(|v| v.as_u64()) {
+                rpm_redline = rl_val as u32;
+            }
+        }
+
+        ui.horizontal(|ui| {
+            ui.label("  "); // Indent
+            if ui
+                .add(egui::DragValue::new(&mut rpm_max).prefix("Max RPM: "))
+                .changed()
+                || ui
+                    .add(egui::DragValue::new(&mut rpm_redline).prefix("Redline: "))
+                    .changed()
+            {
+                let mut new_opts = serde_json::Map::new();
+                new_opts.insert(
+                    "rpm_max".to_string(),
+                    serde_json::Value::Number(rpm_max.into()),
+                );
+                new_opts.insert(
+                    "rpm_redline".to_string(),
+                    serde_json::Value::Number(rpm_redline.into()),
+                );
+                el.options = Some(serde_json::Value::Object(new_opts));
+            }
+        });
+    }
+
     fn render_skia(
         &self,
         pixmap: &mut PixmapMut,
