@@ -93,14 +93,12 @@ impl TelemetryLog {
         let actual_speed_source = if speed_source == crate::project::SpeedSource::Auto {
             let mut gps_count = 0;
             let mut obd_count = 0;
-            for result in rdr.deserialize::<RawTelemetryRow>() {
-                if let Ok(row) = result {
-                    if row.gps_update == 1 {
-                        gps_count += 1;
-                    }
-                    if row.obd_update == 1 {
-                        obd_count += 1;
-                    }
+            for row in rdr.deserialize::<RawTelemetryRow>().flatten() {
+                if row.gps_update == 1 {
+                    gps_count += 1;
+                }
+                if row.obd_update == 1 {
+                    obd_count += 1;
                 }
             }
             if obd_count > gps_count {
