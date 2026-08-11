@@ -124,17 +124,18 @@ impl VideoPlayer {
                     return;
                 }
             };
-            let codec_ctx = match ffmpeg::codec::context::Context::from_parameters(stream.parameters()) {
-                Ok(ctx) => ctx,
-                Err(e) => {
-                    let msg = format!("Failed to get codec context parameters: {}", e);
-                    error!("Background video error: {}", msg);
-                    if let Ok(mut lock) = error_state_bg.lock() {
-                        *lock = Some(msg);
+            let codec_ctx =
+                match ffmpeg::codec::context::Context::from_parameters(stream.parameters()) {
+                    Ok(ctx) => ctx,
+                    Err(e) => {
+                        let msg = format!("Failed to get codec context parameters: {}", e);
+                        error!("Background video error: {}", msg);
+                        if let Ok(mut lock) = error_state_bg.lock() {
+                            *lock = Some(msg);
+                        }
+                        return;
                     }
-                    return;
-                }
-            };
+                };
             let decoder = match codec_ctx.decoder().video() {
                 Ok(d) => d,
                 Err(e) => {
