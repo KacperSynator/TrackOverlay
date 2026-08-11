@@ -7,6 +7,12 @@ use crate::trackmap::TrackMap;
 use eframe::egui;
 use tiny_skia::{LineCap, LineJoin, Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
+static GREEN_LEDS: u32 = 4;
+static YELLOW_LEDS: u32 = 4;
+static RED_LEDS: u32 = 4;
+static DEFAULT_LED_RADIUS: f32 = 10.0;
+static DEFAULT_LED_SPACING: f32 = 25.0;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RpmStyle {
     Bar,
@@ -224,27 +230,25 @@ impl RpmOverlay {
         rpm_max: f32,
         rpm_redline: f32,
     ) {
-        // 3 green, 3 yellow, 2 red = 8 total
-        let num_leds = 8;
-        let led_radius = 10.0 * el.scale;
-        let spacing = 25.0 * el.scale;
+        let num_leds = GREEN_LEDS + YELLOW_LEDS + RED_LEDS;
+        let led_radius = DEFAULT_LED_RADIUS * el.scale;
+        let spacing = DEFAULT_LED_SPACING * el.scale;
         let total_width = (num_leds - 1) as f32 * spacing;
         let start_x = center.x - total_width / 2.0;
 
         // RPM thresholds
-        let green_yellow_thresholds = 6;
-        let red_thresholds = 2;
+        let green_yellow_leds = GREEN_LEDS + YELLOW_LEDS;
 
-        let green_yellow_step = rpm_redline / green_yellow_thresholds as f32;
-        let red_step = (rpm_max - rpm_redline) / red_thresholds as f32;
+        let green_yellow_step = rpm_redline / green_yellow_leds as f32;
+        let red_step = (rpm_max - rpm_redline) / RED_LEDS as f32;
 
         for i in 0..num_leds {
             let x = start_x + (i as f32) * spacing;
             let led_pos = egui::pos2(x, center.y);
 
-            let (threshold, base_color) = if i < 3 {
+            let (threshold, base_color) = if i < GREEN_LEDS {
                 ((i + 1) as f32 * green_yellow_step, egui::Color32::GREEN)
-            } else if i < 6 {
+            } else if i < green_yellow_leds {
                 ((i + 1) as f32 * green_yellow_step, egui::Color32::YELLOW)
             } else {
                 (rpm_redline + (i - 5) as f32 * red_step, egui::Color32::RED)
@@ -541,22 +545,21 @@ impl RpmOverlay {
         rpm_max: f32,
         rpm_redline: f32,
     ) {
-        let num_leds = 8;
-        let led_radius = 10.0 * el.scale * res_scale;
-        let spacing = 25.0 * el.scale * res_scale;
+        let num_leds = GREEN_LEDS + YELLOW_LEDS + RED_LEDS;
+        let led_radius = DEFAULT_LED_RADIUS * el.scale * res_scale;
+        let spacing = DEFAULT_LED_SPACING * el.scale * res_scale;
         let total_width = (num_leds - 1) as f32 * spacing;
         let start_x = center_x - total_width / 2.0;
 
-        let green_yellow_thresholds = 6;
-        let red_thresholds = 2;
-        let green_yellow_step = rpm_redline / green_yellow_thresholds as f32;
-        let red_step = (rpm_max - rpm_redline) / red_thresholds as f32;
+        let green_yellow_leds = GREEN_LEDS + YELLOW_LEDS;
+        let green_yellow_step = rpm_redline / green_yellow_leds as f32;
+        let red_step = (rpm_max - rpm_redline) / RED_LEDS as f32;
 
         for i in 0..num_leds {
             let x = start_x + (i as f32) * spacing;
-            let (threshold, r, g, b) = if i < 3 {
+            let (threshold, r, g, b) = if i < GREEN_LEDS {
                 ((i + 1) as f32 * green_yellow_step, 0, 255, 0)
-            } else if i < 6 {
+            } else if i < green_yellow_leds {
                 ((i + 1) as f32 * green_yellow_step, 255, 255, 0)
             } else {
                 (rpm_redline + (i - 5) as f32 * red_step, 255, 0, 0)
