@@ -30,6 +30,15 @@ pub struct RawTelemetryRow {
 
     #[serde(rename = "Engine Speed (RPM) *OBD", default)]
     pub engine_speed_rpm: f32,
+
+    #[serde(rename = "Vehicle Speed (km/h) *OBD", default)]
+    pub obd_speed_kph: f32,
+
+    #[serde(rename = "GPS_Update", default)]
+    pub gps_update: u8,
+
+    #[serde(rename = "OBD_Update", default)]
+    pub obd_update: u8,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,6 +53,7 @@ pub struct TelemetrySample {
     pub lap_time_ms: Option<i64>,
     pub throttle_pct: f32,
     pub engine_speed_rpm: f32,
+
     pub session_distance_m: f64,
     pub lap_distance_m: f64,
 }
@@ -72,10 +82,40 @@ pub struct TelemetryLog {
 }
 
 impl TelemetryLog {
-    pub fn load_csv<P: AsRef<Path>>(path: P) -> Result<Self> {
+    pub fn load_csv<P: AsRef<Path>>(
+        path: P,
+        speed_source: crate::project::SpeedSource,
+    ) -> Result<Self> {
         let mut rdr = csv::ReaderBuilder::new()
             .comment(Some(b'#'))
-            .from_path(path)?;
+            .from_path(path.as_ref())?;
+
+        let actual_speed_source = if speed_source == crate::project::SpeedSource::Auto {
+            let mut gps_count = 0;
+            let mut obd_count = 0;
+            for result in rdr.deserialize::<RawTelemetryRow>() {
+                if let Ok(row) = result {
+                    if row.gps_update == 1 {
+                        gps_count += 1;
+                    }
+                    if row.obd_update == 1 {
+                        obd_count += 1;
+                    }
+                }
+            }
+            if obd_count > gps_count {
+                crate::project::SpeedSource::Obd
+            } else {
+                crate::project::SpeedSource::Gps
+            }
+        } else {
+            speed_source
+        };
+
+        // Re-initialize reader for actual parsing
+        let mut rdr = csv::ReaderBuilder::new()
+            .comment(Some(b'#'))
+            .from_path(path.as_ref())?;
 
         let mut samples = Vec::new();
         let mut lap_start_time = 0.0;
@@ -89,6 +129,11 @@ impl TelemetryLog {
             let row: RawTelemetryRow = match result {
                 Ok(r) => r,
                 Err(_) => continue, // Skip malformed rows
+            };
+
+            let current_speed_kph = match actual_speed_source {
+                crate::project::SpeedSource::Obd => row.obd_speed_kph,
+                _ => row.speed_kph,
             };
 
             if i == 0 {
@@ -112,7 +157,7 @@ impl TelemetryLog {
 
             let dt = row.time - last_time;
             if i > 0 && dt > 0.0 {
-                let dist = (row.speed_kph as f64 / 3.6) * dt;
+                let dist = (current_speed_kph as f64 / 3.6) * dt;
                 session_distance_m += dist;
                 lap_distance_m += dist;
             }
@@ -122,7 +167,7 @@ impl TelemetryLog {
 
             samples.push(TelemetrySample {
                 time_ms: (row.time * 1000.0) as i64,
-                speed_kph: row.speed_kph,
+                speed_kph: current_speed_kph,
                 lat: row.latitude,
                 lon: row.longitude,
                 accel_lat_g: row.accel_x, // Mapping x to lat, configurable later

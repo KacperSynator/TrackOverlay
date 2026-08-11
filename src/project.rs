@@ -23,6 +23,14 @@ pub struct OverlayElement {
     pub options: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub enum SpeedSource {
+    #[default]
+    Auto,
+    Gps,
+    Obd,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SyncMode {
     Manual,
@@ -48,6 +56,8 @@ pub struct ProjectConfig {
     pub export_start_ms: Option<i64>,
     #[serde(default)]
     pub export_end_ms: Option<i64>,
+    #[serde(default)]
+    pub speed_source: SpeedSource,
 }
 
 impl ProjectConfig {
