@@ -189,20 +189,38 @@ fn render_export_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
             let total = lock.total_frames.max(1);
             let progress_pct = (done as f32 / total as f32).clamp(0.0, 1.0);
 
-            ui.add(egui::ProgressBar::new(progress_pct).text(format!("{:.1}%", progress_pct * 100.0)));
+            ui.add(
+                egui::ProgressBar::new(progress_pct).text(format!("{:.1}%", progress_pct * 100.0)),
+            );
 
             let elapsed_s = lock.start_time.map_or(0.0, |t| t.elapsed().as_secs_f32());
 
-            let fps = if elapsed_s > 0.0 { done as f32 / elapsed_s } else { 0.0 };
+            let fps = if elapsed_s > 0.0 {
+                done as f32 / elapsed_s
+            } else {
+                0.0
+            };
 
             let remaining = total.saturating_sub(done);
-            let eta_s = if fps > 0.0 { remaining as f32 / fps } else { 0.0 };
+            let eta_s = if fps > 0.0 {
+                remaining as f32 / fps
+            } else {
+                0.0
+            };
 
             ui.label(format!("Frames: {} / {}", done, total));
             ui.label(format!("Speed: {:.1} fps", fps));
 
-            let elapsed_str = format!("{:02}:{:02}", (elapsed_s / 60.0).floor(), (elapsed_s % 60.0).floor());
-            let eta_str = format!("{:02}:{:02}", (eta_s / 60.0).floor(), (eta_s % 60.0).floor());
+            let elapsed_str = format!(
+                "{:02}:{:02}",
+                (elapsed_s / 60.0).floor(),
+                (elapsed_s % 60.0).floor()
+            );
+            let eta_str = format!(
+                "{:02}:{:02}",
+                (eta_s / 60.0).floor(),
+                (eta_s % 60.0).floor()
+            );
 
             ui.label(format!("Elapsed: {} | ETA: {}", elapsed_str, eta_str));
         }

@@ -119,8 +119,8 @@ pub fn export_video(
     let trackmap =
         crate::trackmap::TrackMap::from_telemetry(&temp_log, &telemetry_view.extract_laps());
 
-    let fps = f64::from(input_stream.rate().numerator())
-        / f64::from(input_stream.rate().denominator());
+    let fps =
+        f64::from(input_stream.rate().numerator()) / f64::from(input_stream.rate().denominator());
 
     let mut start_s = 0.0;
     if let Some(s) = config.export_start_ms {
