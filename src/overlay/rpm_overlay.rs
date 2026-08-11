@@ -266,7 +266,7 @@ impl RpmOverlay {
             painter.circle_stroke(
                 led_pos,
                 led_radius,
-                egui::Stroke::new(1.0, egui::Color32::from_black_alpha(150)),
+                egui::Stroke::new(1.0_f32, egui::Color32::from_black_alpha(150)),
             );
         }
     }
