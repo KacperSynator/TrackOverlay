@@ -182,7 +182,15 @@ pub fn render_video_panel(app: &mut MyApp, ui: &mut egui::Ui) {
         let center = available_video_area.center();
         let draw_rect = egui::Rect::from_center_size(center, egui::vec2(w, h));
 
-        if let Some(err_msg) = app.video_player.as_ref().and_then(|p| p.get_error()) {
+        if let Some(err_msg) = &app.video_error {
+            ui.painter().text(
+                center,
+                egui::Align2::CENTER_CENTER,
+                format!("Video Error:\n{}", err_msg),
+                egui::FontId::proportional(24.0),
+                egui::Color32::RED,
+            );
+        } else if let Some(err_msg) = app.video_player.as_ref().and_then(|p| p.get_error()) {
             ui.painter().text(
                 center,
                 egui::Align2::CENTER_CENTER,

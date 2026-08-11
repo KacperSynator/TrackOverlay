@@ -12,11 +12,18 @@ fn handle_pick_video(app: &mut MyApp, ctx: &egui::Context, path_buf: PathBuf) {
     app.last_seek_ms = -1;
 
     let repaint_ctx = ctx.clone();
-    if let Ok(mut player) = VideoPlayer::new(&path_buf, move || repaint_ctx.request_repaint()) {
-        if let Some(dur) = player.duration_ms() {
-            app.video_duration_ms = dur;
+    match VideoPlayer::new(&path_buf, move || repaint_ctx.request_repaint()) {
+        Ok(mut player) => {
+            if let Some(dur) = player.duration_ms() {
+                app.video_duration_ms = dur;
+            }
+            app.video_player = Some(player);
+            app.video_error = None;
         }
-        app.video_player = Some(player);
+        Err(e) => {
+            app.video_player = None;
+            app.video_error = Some(format!("Failed to load video: {}", e));
+        }
     }
 }
 

@@ -37,6 +37,7 @@ pub struct MyApp {
     pub dialog_mode: DialogMode,
 
     pub video_player: Option<VideoPlayer>,
+    pub video_error: Option<String>,
     pub video_texture: Option<egui::TextureHandle>,
     pub last_seek_ms: i64,
     pub video_duration_ms: i64,
@@ -69,6 +70,7 @@ impl MyApp {
             file_dialog: fd,
             dialog_mode: DialogMode::None,
             video_player: None,
+            video_error: None,
             video_texture: None,
             last_seek_ms: -1,
             video_duration_ms: 60000,
