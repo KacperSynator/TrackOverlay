@@ -48,6 +48,17 @@
       "x": 0.2,
       "y": 0.85,
       "scale": 1.0
+    },
+    {
+      "enabled": true,
+      "kind": "RpmOverlay",
+      "x": 0.5,
+      "y": 0.95,
+      "scale": 1.0,
+      "options": {
+        "rpm_max": 6500,
+        "rpm_redline": 6000
+      }
     }
   ],
   "flip_vertical": false,

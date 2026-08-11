@@ -9,6 +9,7 @@ pub enum OverlayKind {
     AdvancedLapTimer,
     TrackMap,
     ThrottleBar,
+    RpmOverlay,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -18,6 +19,8 @@ pub struct OverlayElement {
     pub x: f32,
     pub y: f32,
     pub scale: f32,
+    #[serde(default)]
+    pub options: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

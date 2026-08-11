@@ -271,6 +271,8 @@ fn render_layout_editor_section(app: &mut MyApp, ui: &mut egui::Ui) {
             ui.add(egui::Slider::new(&mut el.y, 0.0..=1.0).text("Y"));
             ui.add(egui::Slider::new(&mut el.scale, 0.5..=3.0).text("Scale"));
         });
+
+        crate::overlay::get_impl(&el.kind).custom_ui(ui, el);
     }
 }
 

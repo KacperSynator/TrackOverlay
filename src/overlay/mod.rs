@@ -8,6 +8,7 @@ pub mod advanced_lap_timer;
 pub mod common;
 pub mod gforce_meter;
 pub mod lap_timer;
+pub mod rpm_overlay;
 pub mod speed_readout;
 pub mod throttle_bar;
 pub mod track_map;
@@ -29,9 +30,10 @@ pub trait OverlayImpl {
         trackmap: Option<&TrackMap>,
         font_opt: Option<&rusttype::Font>,
     );
+    fn custom_ui(&self, _ui: &mut egui::Ui, _el: &mut OverlayElement) {}
 }
 
-fn get_impl(kind: &OverlayKind) -> Box<dyn OverlayImpl> {
+pub fn get_impl(kind: &OverlayKind) -> Box<dyn OverlayImpl> {
     match kind {
         OverlayKind::SpeedReadout => Box::new(speed_readout::SpeedReadout),
         OverlayKind::GForceMeter => Box::new(gforce_meter::GForceMeter),
@@ -39,6 +41,7 @@ fn get_impl(kind: &OverlayKind) -> Box<dyn OverlayImpl> {
         OverlayKind::AdvancedLapTimer => Box::new(advanced_lap_timer::AdvancedLapTimer),
         OverlayKind::TrackMap => Box::new(track_map::TrackMapOverlay),
         OverlayKind::ThrottleBar => Box::new(throttle_bar::ThrottleBar),
+        OverlayKind::RpmOverlay => Box::new(rpm_overlay::RpmOverlay),
     }
 }
 
@@ -87,6 +90,7 @@ mod tests {
                 x: 0.5,
                 y: 0.5,
                 scale: 1.0,
+                options: None,
             },
             OverlayElement {
                 enabled: false,
@@ -94,6 +98,7 @@ mod tests {
                 x: 0.5,
                 y: 0.5,
                 scale: 1.0,
+                options: None,
             },
         ]
     }

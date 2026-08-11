@@ -111,6 +111,7 @@ mod tests {
             x: 0.5,
             y: 0.5,
             scale: 1.0,
+            options: None,
         }
     }
 
