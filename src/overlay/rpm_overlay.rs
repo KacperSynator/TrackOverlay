@@ -644,19 +644,19 @@ impl OverlayImpl for RpmOverlay {
                 .selected_text(style_str.clone())
                 .show_ui(ui, |ui| {
                     if ui
-                        .selectable_value(&mut style_str, "bar".to_string(), "Bar")
+                        .selectable_value(&mut style_str, "Bar".to_string(), "Bar")
                         .clicked()
                     {
                         changed = true;
                     }
                     if ui
-                        .selectable_value(&mut style_str, "dial".to_string(), "Dial")
+                        .selectable_value(&mut style_str, "Dial".to_string(), "Dial")
                         .clicked()
                     {
                         changed = true;
                     }
                     if ui
-                        .selectable_value(&mut style_str, "leds".to_string(), "LEDs")
+                        .selectable_value(&mut style_str, "Leds".to_string(), "LEDs")
                         .clicked()
                     {
                         changed = true;
