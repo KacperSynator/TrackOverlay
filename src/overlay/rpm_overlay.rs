@@ -5,7 +5,7 @@ use crate::project::OverlayElement;
 use crate::telemetry::TelemetryState;
 use crate::trackmap::TrackMap;
 use eframe::egui;
-use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform, LineCap, LineJoin};
+use tiny_skia::{LineCap, LineJoin, Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RpmStyle {
@@ -142,7 +142,9 @@ impl RpmOverlay {
             // In screen space, y grows downwards. To make -135 bottom left and +135 bottom right,
             // we rotate by -90 deg so that 0 is UP.
             let rotated_angle = angle - PI / 2.0;
-            bg_points.push(center + egui::vec2(rotated_angle.cos() * radius, rotated_angle.sin() * radius));
+            bg_points.push(
+                center + egui::vec2(rotated_angle.cos() * radius, rotated_angle.sin() * radius),
+            );
         }
         painter.add(egui::Shape::line(
             bg_points,
@@ -157,7 +159,9 @@ impl RpmOverlay {
                 let t = red_start_t + (1.0 - red_start_t) * (i as f32 / 16.0);
                 let angle = start_angle + t * angle_range;
                 let rotated_angle = angle - PI / 2.0;
-                red_points.push(center + egui::vec2(rotated_angle.cos() * radius, rotated_angle.sin() * radius));
+                red_points.push(
+                    center + egui::vec2(rotated_angle.cos() * radius, rotated_angle.sin() * radius),
+                );
             }
             painter.add(egui::Shape::line(
                 red_points,
@@ -173,7 +177,11 @@ impl RpmOverlay {
             let rotated_angle = angle - PI / 2.0;
 
             let label_radius = radius - 20.0 * el.scale;
-            let text_pos = center + egui::vec2(rotated_angle.cos() * label_radius, rotated_angle.sin() * label_radius);
+            let text_pos = center
+                + egui::vec2(
+                    rotated_angle.cos() * label_radius,
+                    rotated_angle.sin() * label_radius,
+                );
 
             let color = if (i as f32 * 1000.0) >= rpm_redline {
                 egui::Color32::RED
@@ -194,7 +202,11 @@ impl RpmOverlay {
         let rpm_ratio = rpm / rpm_max;
         let needle_angle = start_angle + rpm_ratio * angle_range;
         let rotated_needle = needle_angle - PI / 2.0;
-        let needle_end = center + egui::vec2(rotated_needle.cos() * radius * 0.9, rotated_needle.sin() * radius * 0.9);
+        let needle_end = center
+            + egui::vec2(
+                rotated_needle.cos() * radius * 0.9,
+                rotated_needle.sin() * radius * 0.9,
+            );
 
         painter.line_segment(
             [center, needle_end],
@@ -260,6 +272,7 @@ impl RpmOverlay {
     }
 
     // --- BAR SKIA ---
+    #[allow(clippy::too_many_arguments)]
     fn render_bar_skia(
         pixmap: &mut PixmapMut,
         el: &OverlayElement,
@@ -350,7 +363,9 @@ impl RpmOverlay {
                     paint_white.set_color_rgba8(255, 255, 255, 255);
                     pixmap.fill_rect(white_rect, &paint_white, Transform::identity(), None);
                 }
-                if let Some(red_rect) = Rect::from_xywh(left + redline_w, top, fill_w - redline_w, h) {
+                if let Some(red_rect) =
+                    Rect::from_xywh(left + redline_w, top, fill_w - redline_w, h)
+                {
                     let mut paint_red = Paint::default();
                     paint_red.set_color_rgba8(255, 0, 0, 255);
                     pixmap.fill_rect(red_rect, &paint_red, Transform::identity(), None);
@@ -360,6 +375,7 @@ impl RpmOverlay {
     }
 
     // --- DIAL SKIA ---
+    #[allow(clippy::too_many_arguments)]
     fn render_dial_skia(
         pixmap: &mut PixmapMut,
         el: &OverlayElement,
@@ -395,7 +411,12 @@ impl RpmOverlay {
         if let Some(path) = pb_bg.finish() {
             let mut paint = Paint::default();
             paint.set_color_rgba8(0, 0, 0, 150);
-            let stroke = Stroke { width: 10.0 * el.scale * res_scale, line_cap: LineCap::Round, line_join: LineJoin::Round, ..Default::default() };
+            let stroke = Stroke {
+                width: 10.0 * el.scale * res_scale,
+                line_cap: LineCap::Round,
+                line_join: LineJoin::Round,
+                ..Default::default()
+            };
             pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
         }
 
@@ -418,7 +439,12 @@ impl RpmOverlay {
             if let Some(path) = pb_red.finish() {
                 let mut paint = Paint::default();
                 paint.set_color_rgba8(255, 0, 0, 255);
-                let stroke = Stroke { width: 10.0 * el.scale * res_scale, line_cap: LineCap::Round, line_join: LineJoin::Round, ..Default::default() };
+                let stroke = Stroke {
+                    width: 10.0 * el.scale * res_scale,
+                    line_cap: LineCap::Round,
+                    line_join: LineJoin::Round,
+                    ..Default::default()
+                };
                 pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
             }
         }
@@ -433,7 +459,8 @@ impl RpmOverlay {
             let label_radius = radius - 20.0 * el.scale * res_scale;
             let text_x = center_x + rotated_angle.cos() * label_radius;
             // tiny_skia text renders from bottom left, approximate center alignment
-            let text_y = center_y + rotated_angle.sin() * label_radius + (5.0 * el.scale * res_scale);
+            let text_y =
+                center_y + rotated_angle.sin() * label_radius + (5.0 * el.scale * res_scale);
 
             let color = if (i as f32 * 1000.0) >= rpm_redline {
                 tiny_skia::Color::from_rgba8(255, 0, 0, 255)
@@ -444,11 +471,22 @@ impl RpmOverlay {
             let text = format!("{}", i);
             if let Some(font) = font_opt {
                 crate::overlay::common::draw_text(
-                    pixmap, font, &text, text_x, text_y, 16.0 * el.scale * res_scale, color,
+                    pixmap,
+                    font,
+                    &text,
+                    text_x,
+                    text_y,
+                    16.0 * el.scale * res_scale,
+                    color,
                 );
             } else {
                 crate::overlay::common::draw_text_fallback(
-                    pixmap, text_x, text_y, 10.0 * el.scale * res_scale, 10.0 * el.scale * res_scale, color,
+                    pixmap,
+                    text_x,
+                    text_y,
+                    10.0 * el.scale * res_scale,
+                    10.0 * el.scale * res_scale,
+                    color,
                 );
             }
         }
@@ -466,7 +504,12 @@ impl RpmOverlay {
         if let Some(path) = pb_needle.finish() {
             let mut paint = Paint::default();
             paint.set_color_rgba8(255, 255, 255, 255);
-            let stroke = Stroke { width: 3.0 * el.scale * res_scale, line_cap: LineCap::Round, line_join: LineJoin::Round, ..Default::default() };
+            let stroke = Stroke {
+                width: 3.0 * el.scale * res_scale,
+                line_cap: LineCap::Round,
+                line_join: LineJoin::Round,
+                ..Default::default()
+            };
             pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
         }
 
@@ -476,11 +519,18 @@ impl RpmOverlay {
         if let Some(path) = pb_center.finish() {
             let mut paint = Paint::default();
             paint.set_color_rgba8(255, 255, 255, 255);
-            pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, Transform::identity(), None);
+            pixmap.fill_path(
+                &path,
+                &paint,
+                tiny_skia::FillRule::Winding,
+                Transform::identity(),
+                None,
+            );
         }
     }
 
     // --- LEDS SKIA ---
+    #[allow(clippy::too_many_arguments)]
     fn render_leds_skia(
         pixmap: &mut PixmapMut,
         el: &OverlayElement,
@@ -516,7 +566,11 @@ impl RpmOverlay {
             let (r, g, b) = if is_on {
                 (r, g, b)
             } else {
-                ((r as f32 * 0.2) as u8, (g as f32 * 0.2) as u8, (b as f32 * 0.2) as u8)
+                (
+                    (r as f32 * 0.2) as u8,
+                    (g as f32 * 0.2) as u8,
+                    (b as f32 * 0.2) as u8,
+                )
             };
 
             let mut pb_led = PathBuilder::new();
@@ -524,11 +578,20 @@ impl RpmOverlay {
             if let Some(path) = pb_led.finish() {
                 let mut paint = Paint::default();
                 paint.set_color_rgba8(r, g, b, 255);
-                pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, Transform::identity(), None);
+                pixmap.fill_path(
+                    &path,
+                    &paint,
+                    tiny_skia::FillRule::Winding,
+                    Transform::identity(),
+                    None,
+                );
 
                 let mut stroke_paint = Paint::default();
                 stroke_paint.set_color_rgba8(0, 0, 0, 150);
-                let stroke = Stroke { width: 1.0, ..Default::default() };
+                let stroke = Stroke {
+                    width: 1.0,
+                    ..Default::default()
+                };
                 pixmap.stroke_path(&path, &stroke_paint, &stroke, Transform::identity(), None);
             }
         }
@@ -580,13 +643,22 @@ impl OverlayImpl for RpmOverlay {
             egui::ComboBox::from_id_salt(format!("rpm_style_{}", kind as u32))
                 .selected_text(style_str.clone())
                 .show_ui(ui, |ui| {
-                    if ui.selectable_value(&mut style_str, "bar".to_string(), "Bar").clicked() {
+                    if ui
+                        .selectable_value(&mut style_str, "bar".to_string(), "Bar")
+                        .clicked()
+                    {
                         changed = true;
                     }
-                    if ui.selectable_value(&mut style_str, "dial".to_string(), "Dial").clicked() {
+                    if ui
+                        .selectable_value(&mut style_str, "dial".to_string(), "Dial")
+                        .clicked()
+                    {
                         changed = true;
                     }
-                    if ui.selectable_value(&mut style_str, "leds".to_string(), "LEDs").clicked() {
+                    if ui
+                        .selectable_value(&mut style_str, "leds".to_string(), "LEDs")
+                        .clicked()
+                    {
                         changed = true;
                     }
                 });
@@ -650,9 +722,38 @@ impl OverlayImpl for RpmOverlay {
             .clamp(0.0, rpm_max);
 
         match style {
-            RpmStyle::Bar => Self::render_bar_skia(pixmap, el, center_x, center_y, res_scale, rpm, rpm_max, rpm_redline, font_opt),
-            RpmStyle::Dial => Self::render_dial_skia(pixmap, el, center_x, center_y, res_scale, rpm, rpm_max, rpm_redline, font_opt),
-            RpmStyle::Leds => Self::render_leds_skia(pixmap, el, center_x, center_y, res_scale, rpm, rpm_max, rpm_redline),
+            RpmStyle::Bar => Self::render_bar_skia(
+                pixmap,
+                el,
+                center_x,
+                center_y,
+                res_scale,
+                rpm,
+                rpm_max,
+                rpm_redline,
+                font_opt,
+            ),
+            RpmStyle::Dial => Self::render_dial_skia(
+                pixmap,
+                el,
+                center_x,
+                center_y,
+                res_scale,
+                rpm,
+                rpm_max,
+                rpm_redline,
+                font_opt,
+            ),
+            RpmStyle::Leds => Self::render_leds_skia(
+                pixmap,
+                el,
+                center_x,
+                center_y,
+                res_scale,
+                rpm,
+                rpm_max,
+                rpm_redline,
+            ),
         }
     }
 }
@@ -752,7 +853,8 @@ mod tests {
             let ctx = egui::Context::default();
             let _ = ctx.run_ui(egui::RawInput::default(), |ctx| {
                 egui::CentralPanel::default().show_inside(ctx, |ui| {
-                    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+                    let rect =
+                        egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
 
                     let overlay = RpmOverlay;
 
