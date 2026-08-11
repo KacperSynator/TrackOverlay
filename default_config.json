@@ -58,7 +58,6 @@
       "options": {
         "rpm_max": 6500,
         "rpm_redline": 6000,
-        "_style_comment": "Available styles: 'Bar', 'Dial', 'Leds'",
         "style": "Bar"
       }
     }
