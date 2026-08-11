@@ -135,11 +135,7 @@ impl eframe::App for MyApp {
                 Err(e) => self.export_progress = Some(format!("Export failed: {}", e)),
             }
         }
-        if let Some(arc) = &self.active_export_progress {
-            if let Ok(lock) = arc.lock() {
-                let text = format!("Exporting: {} / {}", lock.frames_done, lock.total_frames);
-                self.export_progress = Some(text);
-            }
+        if self.active_export_progress.is_some() {
             ctx.request_repaint();
         }
         if self.is_playing {

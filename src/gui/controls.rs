@@ -173,10 +173,65 @@ fn render_export_end(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
     needs_telemetry_recalc
 }
 
-fn render_export_range_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
-    ui.heading("Export Range");
+fn render_export_progress(app: &MyApp, ui: &mut egui::Ui) {
+    if let Some(arc) = &app.active_export_progress {
+        if let Ok(lock) = arc.lock() {
+            let done = lock.frames_done;
+            let total = lock.total_frames.max(1);
+            let progress_pct = (done as f32 / total as f32).clamp(0.0, 1.0);
+
+            ui.add(
+                egui::ProgressBar::new(progress_pct).text(format!("{:.1}%", progress_pct * 100.0)),
+            );
+
+            let elapsed_s = lock.start_time.map_or(0.0, |t| t.elapsed().as_secs_f32());
+
+            let fps = if elapsed_s > 0.0 {
+                done as f32 / elapsed_s
+            } else {
+                0.0
+            };
+
+            let remaining = total.saturating_sub(done);
+            let eta_s = if fps > 0.0 {
+                remaining as f32 / fps
+            } else {
+                0.0
+            };
+
+            ui.label(format!("Frames: {} / {}", done, total));
+            ui.label(format!("Speed: {:.1} fps", fps));
+
+            let elapsed_str = format!(
+                "{:02}:{:02}",
+                (elapsed_s / 60.0).floor(),
+                (elapsed_s % 60.0).floor()
+            );
+            let eta_str = format!(
+                "{:02}:{:02}",
+                (eta_s / 60.0).floor(),
+                (eta_s % 60.0).floor()
+            );
+
+            ui.label(format!("Elapsed: {} | ETA: {}", elapsed_str, eta_str));
+        }
+    } else if let Some(msg) = &app.export_progress {
+        ui.label(msg);
+    }
+}
+
+fn render_export_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
+    ui.heading("Export");
     let needs_telemetry_recalc_start = render_export_start(app, ui);
     let needs_telemetry_recalc_end = render_export_end(app, ui);
+
+    if ui.button("Export Final Video").clicked() {
+        app.dialog_mode = DialogMode::PickExportOutput;
+        app.file_dialog.save_file();
+    }
+
+    render_export_progress(app, ui);
+
     needs_telemetry_recalc_start || needs_telemetry_recalc_end
 }
 
@@ -276,17 +331,6 @@ fn render_layout_editor_section(app: &mut MyApp, ui: &mut egui::Ui) {
     }
 }
 
-fn render_export_section(app: &mut MyApp, ui: &mut egui::Ui) {
-    if ui.button("Export Final Video").clicked() {
-        app.dialog_mode = DialogMode::PickExportOutput;
-        app.file_dialog.save_file();
-    }
-
-    if let Some(msg) = &app.export_progress {
-        ui.label(msg);
-    }
-}
-
 pub fn render_controls_window(app: &mut MyApp, ctx: &egui::Context) {
     egui::Window::new("Controls").show(ctx, |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -296,7 +340,7 @@ pub fn render_controls_window(app: &mut MyApp, ctx: &egui::Context) {
             render_settings_section(app, ui);
             ui.separator();
 
-            let mut needs_telemetry_recalc = render_export_range_section(app, ui);
+            let mut needs_telemetry_recalc = render_export_section(app, ui);
             ui.separator();
 
             needs_telemetry_recalc |= render_sync_section(app, ui);
@@ -307,9 +351,6 @@ pub fn render_controls_window(app: &mut MyApp, ctx: &egui::Context) {
 
             ui.separator();
             render_layout_editor_section(app, ui);
-            ui.separator();
-
-            render_export_section(app, ui);
         });
     });
 }
