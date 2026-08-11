@@ -5,11 +5,23 @@ use anyhow::{Result, anyhow};
 use ffmpeg_next as ffmpeg;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ExportProgress {
     pub frames_done: usize,
     pub total_frames: usize,
+    pub start_time: Option<Instant>,
+}
+
+impl Default for ExportProgress {
+    fn default() -> Self {
+        Self {
+            frames_done: 0,
+            total_frames: 0,
+            start_time: Some(Instant::now()),
+        }
+    }
 }
 
 pub fn export_video(
@@ -107,20 +119,50 @@ pub fn export_video(
     let trackmap =
         crate::trackmap::TrackMap::from_telemetry(&temp_log, &telemetry_view.extract_laps());
 
-    let total_frames = if input_stream.frames() > 0 {
-        input_stream.frames() as usize
+    let fps = f64::from(input_stream.rate().numerator())
+        / f64::from(input_stream.rate().denominator());
+
+    let mut start_s = 0.0;
+    if let Some(s) = config.export_start_ms {
+        if s > 0 {
+            start_s = s as f64 / 1000.0;
+        }
+    }
+
+    let end_s = if let Some(e) = config.export_end_ms {
+        if e >= 0 {
+            e as f64 / 1000.0
+        } else {
+            let duration = input_stream.duration();
+            if duration > 0 {
+                let tb = input_stream.time_base();
+                let time_base_f = f64::from(tb.numerator()) / f64::from(tb.denominator());
+                duration as f64 * time_base_f
+            } else {
+                0.0
+            }
+        }
     } else {
         let duration = input_stream.duration();
         if duration > 0 {
             let tb = input_stream.time_base();
             let time_base_f = f64::from(tb.numerator()) / f64::from(tb.denominator());
-            let fps = f64::from(input_stream.rate().numerator())
-                / f64::from(input_stream.rate().denominator());
-            (duration as f64 * time_base_f * fps) as usize
+            duration as f64 * time_base_f
         } else {
-            0
+            0.0
         }
     };
+
+    let duration_s = (end_s - start_s).max(0.0);
+    let total_frames = (duration_s * fps).ceil() as usize;
+
+    if let Some(p) = &progress {
+        if let Ok(mut lock) = p.lock() {
+            lock.start_time = Some(Instant::now());
+            lock.total_frames = total_frames;
+        }
+    }
+
     let mut frames_done = 0;
 
     if let Some(start_ms) = config.export_start_ms {
