@@ -34,6 +34,7 @@ pub struct VideoPlayer {
 
     cmd_tx: Sender<PlayerCommand>,
     latest_frame: Arc<Mutex<Option<DecodedFrame>>>,
+    error_state: Arc<Mutex<Option<String>>>,
 }
 
 impl Drop for VideoPlayer {
@@ -96,6 +97,9 @@ impl VideoPlayer {
         let latest_frame = Arc::new(Mutex::new(None));
         let latest_frame_bg = latest_frame.clone();
 
+        let error_state = Arc::new(Mutex::new(None));
+        let error_state_bg = error_state.clone();
+
         let (cmd_tx, cmd_rx) = unbounded::<PlayerCommand>();
 
         let path_for_thread = path_str.clone();
@@ -109,15 +113,42 @@ impl VideoPlayer {
                     return;
                 }
             };
-            let stream = input_ctx
-                .streams()
-                .best(ffmpeg::media::Type::Video)
-                .unwrap();
+            let stream = match input_ctx.streams().best(ffmpeg::media::Type::Video) {
+                Some(s) => s,
+                None => {
+                    let msg = "No video stream found".to_string();
+                    error!("Background video error: {}", msg);
+                    if let Ok(mut lock) = error_state_bg.lock() {
+                        *lock = Some(msg);
+                    }
+                    return;
+                }
+            };
             let codec_ctx =
-                ffmpeg::codec::context::Context::from_parameters(stream.parameters()).unwrap();
-            let decoder = codec_ctx.decoder().video().unwrap();
+                match ffmpeg::codec::context::Context::from_parameters(stream.parameters()) {
+                    Ok(ctx) => ctx,
+                    Err(e) => {
+                        let msg = format!("Failed to get codec context parameters: {}", e);
+                        error!("Background video error: {}", msg);
+                        if let Ok(mut lock) = error_state_bg.lock() {
+                            *lock = Some(msg);
+                        }
+                        return;
+                    }
+                };
+            let decoder = match codec_ctx.decoder().video() {
+                Ok(d) => d,
+                Err(e) => {
+                    let msg = format!("Failed to create video decoder: {}", e);
+                    error!("Background video error: {}", msg);
+                    if let Ok(mut lock) = error_state_bg.lock() {
+                        *lock = Some(msg);
+                    }
+                    return;
+                }
+            };
 
-            let scaler = ffmpeg::software::scaling::Context::get(
+            let scaler = match ffmpeg::software::scaling::Context::get(
                 decoder.format(),
                 width,
                 height,
@@ -125,8 +156,17 @@ impl VideoPlayer {
                 width,
                 height,
                 ffmpeg::software::scaling::flag::Flags::FAST_BILINEAR,
-            )
-            .unwrap();
+            ) {
+                Ok(s) => s,
+                Err(e) => {
+                    let msg = format!("Failed to create scaling context: {}", e);
+                    error!("Background video error: {}", msg);
+                    if let Ok(mut lock) = error_state_bg.lock() {
+                        *lock = Some(msg);
+                    }
+                    return;
+                }
+            };
 
             let frame_cache: LruCache<i64, DecodedFrame> =
                 LruCache::new(NonZeroUsize::new(200).unwrap());
@@ -152,6 +192,7 @@ impl VideoPlayer {
             height,
             cmd_tx,
             latest_frame,
+            error_state,
         })
     }
 
@@ -162,6 +203,14 @@ impl VideoPlayer {
 
     pub fn get_frame(&mut self) -> Option<DecodedFrame> {
         if let Ok(lock) = self.latest_frame.lock() {
+            lock.clone()
+        } else {
+            None
+        }
+    }
+
+    pub fn get_error(&self) -> Option<String> {
+        if let Ok(lock) = self.error_state.lock() {
             lock.clone()
         } else {
             None
