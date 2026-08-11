@@ -1,29 +1,50 @@
+use std::f32::consts::PI;
+
 use crate::overlay::OverlayImpl;
 use crate::project::OverlayElement;
 use crate::telemetry::TelemetryState;
 use crate::trackmap::TrackMap;
 use eframe::egui;
-use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
+use tiny_skia::{LineCap, LineJoin, Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
+
+static GREEN_LEDS: u32 = 4;
+static YELLOW_LEDS: u32 = 4;
+static RED_LEDS: u32 = 4;
+static DEFAULT_LED_RADIUS: f32 = 10.0;
+static DEFAULT_LED_SPACING: f32 = 25.0;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RpmStyle {
+    Bar,
+    Dial,
+    Leds,
+}
+
+impl RpmStyle {
+    fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "dial" => RpmStyle::Dial,
+            "leds" => RpmStyle::Leds,
+            _ => RpmStyle::Bar,
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            RpmStyle::Bar => "Bar",
+            RpmStyle::Dial => "Dial",
+            RpmStyle::Leds => "Leds",
+        }
+    }
+}
 
 pub struct RpmOverlay;
 
-impl OverlayImpl for RpmOverlay {
-    fn render_ui(
-        &self,
-        ui: &mut egui::Ui,
-        rect: egui::Rect,
-        el: &OverlayElement,
-        state: &TelemetryState,
-        _trackmap: Option<&TrackMap>,
-    ) {
-        let painter = ui.painter_at(rect);
-        let center = egui::pos2(
-            rect.left() + el.x * rect.width(),
-            rect.top() + el.y * rect.height(),
-        );
-
+impl RpmOverlay {
+    fn extract_options(el: &OverlayElement) -> (f32, f32, RpmStyle) {
         let mut rpm_max = 6500.0;
         let mut rpm_redline = 6000.0;
+        let mut style = RpmStyle::Bar;
 
         if let Some(opts) = &el.options {
             if let Some(max_val) = opts.get("rpm_max").and_then(|v| v.as_f64()) {
@@ -32,17 +53,25 @@ impl OverlayImpl for RpmOverlay {
             if let Some(rl_val) = opts.get("rpm_redline").and_then(|v| v.as_f64()) {
                 rpm_redline = rl_val as f32;
             }
+            if let Some(s) = opts.get("style").and_then(|v| v.as_str()) {
+                style = RpmStyle::from_str(s);
+            }
         }
 
-        let rpm = state
-            .current_sample
-            .as_ref()
-            .map_or(0.0, |s| s.engine_speed_rpm)
-            .clamp(0.0, rpm_max);
+        (rpm_max, rpm_redline, style)
+    }
 
+    // --- BAR UI ---
+    fn render_bar_ui(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        el: &OverlayElement,
+        rpm: f32,
+        rpm_max: f32,
+        rpm_redline: f32,
+    ) {
         let max_width = 300.0 * el.scale;
         let height = 20.0 * el.scale;
-
         let bg_rect = egui::Rect::from_center_size(center, egui::vec2(max_width, height));
 
         let max_k = (rpm_max / 1000.0).floor() as i32;
@@ -80,12 +109,9 @@ impl OverlayImpl for RpmOverlay {
             fill_rect.set_right(bg_rect.left() + fill_width);
 
             if rpm <= rpm_redline {
-                // Entirely below redline, draw white
                 painter.rect_filled(fill_rect, 2.0, egui::Color32::WHITE);
             } else {
-                // Above redline: draw white part up to redline, then red part
                 let redline_width = (rpm_redline / rpm_max) * max_width;
-
                 let mut white_rect = fill_rect;
                 white_rect.set_right(bg_rect.left() + redline_width);
                 painter.rect_filled(white_rect, 2.0, egui::Color32::WHITE);
@@ -97,76 +123,173 @@ impl OverlayImpl for RpmOverlay {
         }
     }
 
-    fn custom_ui(&self, ui: &mut egui::Ui, el: &mut OverlayElement) {
-        let mut rpm_max = 6500;
-        let mut rpm_redline = 6000;
-        if let Some(opts) = &el.options {
-            if let Some(max_val) = opts.get("rpm_max").and_then(|v| v.as_u64()) {
-                rpm_max = max_val as u32;
+    // --- DIAL UI ---
+    fn render_dial_ui(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        el: &OverlayElement,
+        rpm: f32,
+        rpm_max: f32,
+        rpm_redline: f32,
+    ) {
+        let radius = 100.0 * el.scale;
+
+        let start_angle = -135.0_f32.to_radians();
+        let end_angle = 135.0_f32.to_radians();
+        let angle_range = end_angle - start_angle;
+
+        // Draw background arc
+        let num_points = 64;
+        let mut bg_points = Vec::new();
+        for i in 0..=num_points {
+            let t = i as f32 / num_points as f32;
+            let angle = start_angle + t * angle_range;
+            // Note: in standard math, 0 is right, negative is up.
+            // In screen space, y grows downwards. To make -135 bottom left and +135 bottom right,
+            // we rotate by -90 deg so that 0 is UP.
+            let rotated_angle = angle - PI / 2.0;
+            bg_points.push(
+                center + egui::vec2(rotated_angle.cos() * radius, rotated_angle.sin() * radius),
+            );
+        }
+        painter.add(egui::Shape::line(
+            bg_points,
+            egui::Stroke::new(10.0 * el.scale, egui::Color32::from_black_alpha(150)),
+        ));
+
+        // Draw redline arc
+        if rpm_redline < rpm_max {
+            let red_start_t = rpm_redline / rpm_max;
+            let mut red_points = Vec::new();
+            for i in 0..=16 {
+                let t = red_start_t + (1.0 - red_start_t) * (i as f32 / 16.0);
+                let angle = start_angle + t * angle_range;
+                let rotated_angle = angle - PI / 2.0;
+                red_points.push(
+                    center + egui::vec2(rotated_angle.cos() * radius, rotated_angle.sin() * radius),
+                );
             }
-            if let Some(rl_val) = opts.get("rpm_redline").and_then(|v| v.as_u64()) {
-                rpm_redline = rl_val as u32;
-            }
+            painter.add(egui::Shape::line(
+                red_points,
+                egui::Stroke::new(10.0 * el.scale, egui::Color32::RED),
+            ));
         }
 
-        ui.horizontal(|ui| {
-            ui.label("  "); // Indent
-            if ui
-                .add(egui::DragValue::new(&mut rpm_max).prefix("Max RPM: "))
-                .changed()
-                || ui
-                    .add(egui::DragValue::new(&mut rpm_redline).prefix("Redline: "))
-                    .changed()
-            {
-                let mut new_opts = serde_json::Map::new();
-                new_opts.insert(
-                    "rpm_max".to_string(),
-                    serde_json::Value::Number(rpm_max.into()),
+        // Draw numbers
+        let max_k = (rpm_max / 1000.0).floor() as i32;
+        for i in 0..=max_k {
+            let ratio = (i as f32 * 1000.0) / rpm_max;
+            let angle = start_angle + ratio * angle_range;
+            let rotated_angle = angle - PI / 2.0;
+
+            let label_radius = radius - 20.0 * el.scale;
+            let text_pos = center
+                + egui::vec2(
+                    rotated_angle.cos() * label_radius,
+                    rotated_angle.sin() * label_radius,
                 );
-                new_opts.insert(
-                    "rpm_redline".to_string(),
-                    serde_json::Value::Number(rpm_redline.into()),
-                );
-                el.options = Some(serde_json::Value::Object(new_opts));
-            }
-        });
+
+            let color = if (i as f32 * 1000.0) >= rpm_redline {
+                egui::Color32::RED
+            } else {
+                egui::Color32::WHITE
+            };
+
+            painter.text(
+                text_pos,
+                egui::Align2::CENTER_CENTER,
+                format!("{}", i),
+                egui::FontId::proportional(14.0 * el.scale),
+                color,
+            );
+        }
+
+        // Draw needle
+        let rpm_ratio = rpm / rpm_max;
+        let needle_angle = start_angle + rpm_ratio * angle_range;
+        let rotated_needle = needle_angle - PI / 2.0;
+        let needle_end = center
+            + egui::vec2(
+                rotated_needle.cos() * radius * 0.9,
+                rotated_needle.sin() * radius * 0.9,
+            );
+
+        painter.line_segment(
+            [center, needle_end],
+            egui::Stroke::new(3.0 * el.scale, egui::Color32::WHITE),
+        );
+        painter.circle_filled(center, 5.0 * el.scale, egui::Color32::WHITE);
     }
 
-    fn render_skia(
-        &self,
+    // --- LEDS UI ---
+    fn render_leds_ui(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        el: &OverlayElement,
+        rpm: f32,
+        rpm_max: f32,
+        rpm_redline: f32,
+    ) {
+        let num_leds = GREEN_LEDS + YELLOW_LEDS + RED_LEDS;
+        let led_radius = DEFAULT_LED_RADIUS * el.scale;
+        let spacing = DEFAULT_LED_SPACING * el.scale;
+        let total_width = (num_leds - 1) as f32 * spacing;
+        let start_x = center.x - total_width / 2.0;
+
+        // RPM thresholds
+        let green_yellow_leds = GREEN_LEDS + YELLOW_LEDS;
+
+        let green_yellow_step = rpm_redline / green_yellow_leds as f32;
+        let red_step = (rpm_max - rpm_redline) / RED_LEDS as f32;
+
+        for i in 0..num_leds {
+            let x = start_x + (i as f32) * spacing;
+            let led_pos = egui::pos2(x, center.y);
+
+            let (threshold, base_color) = if i < GREEN_LEDS {
+                ((i + 1) as f32 * green_yellow_step, egui::Color32::GREEN)
+            } else if i < green_yellow_leds {
+                ((i + 1) as f32 * green_yellow_step, egui::Color32::YELLOW)
+            } else {
+                (rpm_redline + (i - 5) as f32 * red_step, egui::Color32::RED)
+            };
+
+            let is_on = rpm >= threshold;
+            let mut color = base_color;
+            if !is_on {
+                // Dim
+                color = egui::Color32::from_rgba_premultiplied(
+                    (color.r() as f32 * 0.2) as u8,
+                    (color.g() as f32 * 0.2) as u8,
+                    (color.b() as f32 * 0.2) as u8,
+                    255,
+                );
+            }
+
+            painter.circle_filled(led_pos, led_radius, color);
+            painter.circle_stroke(
+                led_pos,
+                led_radius,
+                egui::Stroke::new(1.0_f32, egui::Color32::from_black_alpha(150)),
+            );
+        }
+    }
+
+    // --- BAR SKIA ---
+    #[allow(clippy::too_many_arguments)]
+    fn render_bar_skia(
         pixmap: &mut PixmapMut,
         el: &OverlayElement,
-        state: &TelemetryState,
-        _trackmap: Option<&TrackMap>,
+        center_x: f32,
+        center_y: f32,
+        res_scale: f32,
+        rpm: f32,
+        rpm_max: f32,
+        rpm_redline: f32,
         font_opt: Option<&rusttype::Font>,
     ) {
-        let width = pixmap.width() as f32;
-        let height = pixmap.height() as f32;
-        let res_scale = height / 720.0;
-        let center_x = el.x * width;
-        let center_y = el.y * height;
-
-        let mut rpm_max = 6500.0;
-        let mut rpm_redline = 6000.0;
-
-        if let Some(opts) = &el.options {
-            if let Some(max_val) = opts.get("rpm_max").and_then(|v| v.as_f64()) {
-                rpm_max = max_val as f32;
-            }
-            if let Some(rl_val) = opts.get("rpm_redline").and_then(|v| v.as_f64()) {
-                rpm_redline = rl_val as f32;
-            }
-        }
-
-        let rpm = state
-            .current_sample
-            .as_ref()
-            .map_or(0.0, |s| s.engine_speed_rpm)
-            .clamp(0.0, rpm_max);
-
         let max_w = 300.0 * el.scale * res_scale;
         let h = 20.0 * el.scale * res_scale;
-
         let left = center_x - max_w / 2.0;
         let top = center_y - h / 2.0;
 
@@ -231,7 +354,6 @@ impl OverlayImpl for RpmOverlay {
 
         if rpm > 0.0 {
             let fill_w = (rpm / rpm_max) * max_w;
-
             if rpm <= rpm_redline {
                 if let Some(fill_rect) = Rect::from_xywh(left, top, fill_w, h) {
                     let mut paint_fill = Paint::default();
@@ -240,13 +362,11 @@ impl OverlayImpl for RpmOverlay {
                 }
             } else {
                 let redline_w = (rpm_redline / rpm_max) * max_w;
-
                 if let Some(white_rect) = Rect::from_xywh(left, top, redline_w, h) {
                     let mut paint_white = Paint::default();
                     paint_white.set_color_rgba8(255, 255, 255, 255);
                     pixmap.fill_rect(white_rect, &paint_white, Transform::identity(), None);
                 }
-
                 if let Some(red_rect) =
                     Rect::from_xywh(left + redline_w, top, fill_w - redline_w, h)
                 {
@@ -257,6 +377,388 @@ impl OverlayImpl for RpmOverlay {
             }
         }
     }
+
+    // --- DIAL SKIA ---
+    #[allow(clippy::too_many_arguments)]
+    fn render_dial_skia(
+        pixmap: &mut PixmapMut,
+        el: &OverlayElement,
+        center_x: f32,
+        center_y: f32,
+        res_scale: f32,
+        rpm: f32,
+        rpm_max: f32,
+        rpm_redline: f32,
+        font_opt: Option<&rusttype::Font>,
+    ) {
+        let radius = 100.0 * el.scale * res_scale;
+
+        let start_angle = -135.0_f32.to_radians();
+        let end_angle = 135.0_f32.to_radians();
+        let angle_range = end_angle - start_angle;
+
+        // Draw background arc
+        let mut pb_bg = PathBuilder::new();
+        let num_points = 64;
+        for i in 0..=num_points {
+            let t = i as f32 / num_points as f32;
+            let angle = start_angle + t * angle_range;
+            let rotated_angle = angle - PI / 2.0;
+            let x = center_x + rotated_angle.cos() * radius;
+            let y = center_y + rotated_angle.sin() * radius;
+            if i == 0 {
+                pb_bg.move_to(x, y);
+            } else {
+                pb_bg.line_to(x, y);
+            }
+        }
+        if let Some(path) = pb_bg.finish() {
+            let mut paint = Paint::default();
+            paint.set_color_rgba8(0, 0, 0, 150);
+            let stroke = Stroke {
+                width: 10.0 * el.scale * res_scale,
+                line_cap: LineCap::Round,
+                line_join: LineJoin::Round,
+                ..Default::default()
+            };
+            pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+        }
+
+        // Draw redline arc
+        if rpm_redline < rpm_max {
+            let red_start_t = rpm_redline / rpm_max;
+            let mut pb_red = PathBuilder::new();
+            for i in 0..=16 {
+                let t = red_start_t + (1.0 - red_start_t) * (i as f32 / 16.0);
+                let angle = start_angle + t * angle_range;
+                let rotated_angle = angle - PI / 2.0;
+                let x = center_x + rotated_angle.cos() * radius;
+                let y = center_y + rotated_angle.sin() * radius;
+                if i == 0 {
+                    pb_red.move_to(x, y);
+                } else {
+                    pb_red.line_to(x, y);
+                }
+            }
+            if let Some(path) = pb_red.finish() {
+                let mut paint = Paint::default();
+                paint.set_color_rgba8(255, 0, 0, 255);
+                let stroke = Stroke {
+                    width: 10.0 * el.scale * res_scale,
+                    line_cap: LineCap::Round,
+                    line_join: LineJoin::Round,
+                    ..Default::default()
+                };
+                pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+            }
+        }
+
+        // Draw numbers
+        let max_k = (rpm_max / 1000.0).floor() as i32;
+        for i in 0..=max_k {
+            let ratio = (i as f32 * 1000.0) / rpm_max;
+            let angle = start_angle + ratio * angle_range;
+            let rotated_angle = angle - PI / 2.0;
+
+            let label_radius = radius - 20.0 * el.scale * res_scale;
+            let text_x = center_x + rotated_angle.cos() * label_radius;
+            // tiny_skia text renders from bottom left, approximate center alignment
+            let text_y =
+                center_y + rotated_angle.sin() * label_radius + (5.0 * el.scale * res_scale);
+
+            let color = if (i as f32 * 1000.0) >= rpm_redline {
+                tiny_skia::Color::from_rgba8(255, 0, 0, 255)
+            } else {
+                tiny_skia::Color::from_rgba8(255, 255, 255, 255)
+            };
+
+            let text = format!("{}", i);
+            if let Some(font) = font_opt {
+                crate::overlay::common::draw_text(
+                    pixmap,
+                    font,
+                    &text,
+                    text_x,
+                    text_y,
+                    16.0 * el.scale * res_scale,
+                    color,
+                );
+            } else {
+                crate::overlay::common::draw_text_fallback(
+                    pixmap,
+                    text_x,
+                    text_y,
+                    10.0 * el.scale * res_scale,
+                    10.0 * el.scale * res_scale,
+                    color,
+                );
+            }
+        }
+
+        // Draw needle
+        let rpm_ratio = rpm / rpm_max;
+        let needle_angle = start_angle + rpm_ratio * angle_range;
+        let rotated_needle = needle_angle - PI / 2.0;
+        let needle_end_x = center_x + rotated_needle.cos() * radius * 0.9;
+        let needle_end_y = center_y + rotated_needle.sin() * radius * 0.9;
+
+        let mut pb_needle = PathBuilder::new();
+        pb_needle.move_to(center_x, center_y);
+        pb_needle.line_to(needle_end_x, needle_end_y);
+        if let Some(path) = pb_needle.finish() {
+            let mut paint = Paint::default();
+            paint.set_color_rgba8(255, 255, 255, 255);
+            let stroke = Stroke {
+                width: 3.0 * el.scale * res_scale,
+                line_cap: LineCap::Round,
+                line_join: LineJoin::Round,
+                ..Default::default()
+            };
+            pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+        }
+
+        // Draw center dot
+        let mut pb_center = PathBuilder::new();
+        pb_center.push_circle(center_x, center_y, 5.0 * el.scale * res_scale);
+        if let Some(path) = pb_center.finish() {
+            let mut paint = Paint::default();
+            paint.set_color_rgba8(255, 255, 255, 255);
+            pixmap.fill_path(
+                &path,
+                &paint,
+                tiny_skia::FillRule::Winding,
+                Transform::identity(),
+                None,
+            );
+        }
+    }
+
+    // --- LEDS SKIA ---
+    #[allow(clippy::too_many_arguments)]
+    fn render_leds_skia(
+        pixmap: &mut PixmapMut,
+        el: &OverlayElement,
+        center_x: f32,
+        center_y: f32,
+        res_scale: f32,
+        rpm: f32,
+        rpm_max: f32,
+        rpm_redline: f32,
+    ) {
+        let num_leds = GREEN_LEDS + YELLOW_LEDS + RED_LEDS;
+        let led_radius = DEFAULT_LED_RADIUS * el.scale * res_scale;
+        let spacing = DEFAULT_LED_SPACING * el.scale * res_scale;
+        let total_width = (num_leds - 1) as f32 * spacing;
+        let start_x = center_x - total_width / 2.0;
+
+        let green_yellow_leds = GREEN_LEDS + YELLOW_LEDS;
+        let green_yellow_step = rpm_redline / green_yellow_leds as f32;
+        let red_step = (rpm_max - rpm_redline) / RED_LEDS as f32;
+
+        for i in 0..num_leds {
+            let x = start_x + (i as f32) * spacing;
+            let (threshold, r, g, b) = if i < GREEN_LEDS {
+                ((i + 1) as f32 * green_yellow_step, 0, 255, 0)
+            } else if i < green_yellow_leds {
+                ((i + 1) as f32 * green_yellow_step, 255, 255, 0)
+            } else {
+                (rpm_redline + (i - 5) as f32 * red_step, 255, 0, 0)
+            };
+
+            let is_on = rpm >= threshold;
+            let (r, g, b) = if is_on {
+                (r, g, b)
+            } else {
+                (
+                    (r as f32 * 0.2) as u8,
+                    (g as f32 * 0.2) as u8,
+                    (b as f32 * 0.2) as u8,
+                )
+            };
+
+            let mut pb_led = PathBuilder::new();
+            pb_led.push_circle(x, center_y, led_radius);
+            if let Some(path) = pb_led.finish() {
+                let mut paint = Paint::default();
+                paint.set_color_rgba8(r, g, b, 255);
+                pixmap.fill_path(
+                    &path,
+                    &paint,
+                    tiny_skia::FillRule::Winding,
+                    Transform::identity(),
+                    None,
+                );
+
+                let mut stroke_paint = Paint::default();
+                stroke_paint.set_color_rgba8(0, 0, 0, 150);
+                let stroke = Stroke {
+                    width: 1.0,
+                    ..Default::default()
+                };
+                pixmap.stroke_path(&path, &stroke_paint, &stroke, Transform::identity(), None);
+            }
+        }
+    }
+}
+
+impl OverlayImpl for RpmOverlay {
+    fn render_ui(
+        &self,
+        ui: &mut egui::Ui,
+        rect: egui::Rect,
+        el: &OverlayElement,
+        state: &TelemetryState,
+        _trackmap: Option<&TrackMap>,
+    ) {
+        let painter = ui.painter_at(rect);
+        let center = egui::pos2(
+            rect.left() + el.x * rect.width(),
+            rect.top() + el.y * rect.height(),
+        );
+
+        let (rpm_max, rpm_redline, style) = Self::extract_options(el);
+
+        let rpm = state
+            .current_sample
+            .as_ref()
+            .map_or(0.0, |s| s.engine_speed_rpm)
+            .clamp(0.0, rpm_max);
+
+        match style {
+            RpmStyle::Bar => Self::render_bar_ui(&painter, center, el, rpm, rpm_max, rpm_redline),
+            RpmStyle::Dial => Self::render_dial_ui(&painter, center, el, rpm, rpm_max, rpm_redline),
+            RpmStyle::Leds => Self::render_leds_ui(&painter, center, el, rpm, rpm_max, rpm_redline),
+        }
+    }
+
+    fn custom_ui(&self, ui: &mut egui::Ui, el: &mut OverlayElement) {
+        let (rpm_max, rpm_redline, mut current_style) = Self::extract_options(el);
+        let mut max_u = rpm_max as u32;
+        let mut redline_u = rpm_redline as u32;
+
+        let mut changed = false;
+        let kind = el.kind.clone();
+
+        ui.horizontal(|ui| {
+            ui.label("  "); // Indent
+
+            let mut style_str = current_style.as_str().to_string();
+            egui::ComboBox::from_id_salt(format!("rpm_style_{}", kind as u32))
+                .selected_text(style_str.clone())
+                .show_ui(ui, |ui| {
+                    if ui
+                        .selectable_value(&mut style_str, "Bar".to_string(), "Bar")
+                        .clicked()
+                    {
+                        changed = true;
+                    }
+                    if ui
+                        .selectable_value(&mut style_str, "Dial".to_string(), "Dial")
+                        .clicked()
+                    {
+                        changed = true;
+                    }
+                    if ui
+                        .selectable_value(&mut style_str, "Leds".to_string(), "LEDs")
+                        .clicked()
+                    {
+                        changed = true;
+                    }
+                });
+
+            if changed {
+                current_style = RpmStyle::from_str(&style_str);
+            }
+
+            if ui
+                .add(egui::DragValue::new(&mut max_u).prefix("Max RPM: "))
+                .changed()
+            {
+                changed = true;
+            }
+            if ui
+                .add(egui::DragValue::new(&mut redline_u).prefix("Redline: "))
+                .changed()
+            {
+                changed = true;
+            }
+        });
+
+        if changed {
+            let mut new_opts = serde_json::Map::new();
+            new_opts.insert(
+                "rpm_max".to_string(),
+                serde_json::Value::Number(max_u.into()),
+            );
+            new_opts.insert(
+                "rpm_redline".to_string(),
+                serde_json::Value::Number(redline_u.into()),
+            );
+            new_opts.insert(
+                "style".to_string(),
+                serde_json::Value::String(current_style.as_str().to_string()),
+            );
+            el.options = Some(serde_json::Value::Object(new_opts));
+        }
+    }
+
+    fn render_skia(
+        &self,
+        pixmap: &mut PixmapMut,
+        el: &OverlayElement,
+        state: &TelemetryState,
+        _trackmap: Option<&TrackMap>,
+        font_opt: Option<&rusttype::Font>,
+    ) {
+        let width = pixmap.width() as f32;
+        let height = pixmap.height() as f32;
+        let res_scale = height / 720.0;
+        let center_x = el.x * width;
+        let center_y = el.y * height;
+
+        let (rpm_max, rpm_redline, style) = Self::extract_options(el);
+
+        let rpm = state
+            .current_sample
+            .as_ref()
+            .map_or(0.0, |s| s.engine_speed_rpm)
+            .clamp(0.0, rpm_max);
+
+        match style {
+            RpmStyle::Bar => Self::render_bar_skia(
+                pixmap,
+                el,
+                center_x,
+                center_y,
+                res_scale,
+                rpm,
+                rpm_max,
+                rpm_redline,
+                font_opt,
+            ),
+            RpmStyle::Dial => Self::render_dial_skia(
+                pixmap,
+                el,
+                center_x,
+                center_y,
+                res_scale,
+                rpm,
+                rpm_max,
+                rpm_redline,
+                font_opt,
+            ),
+            RpmStyle::Leds => Self::render_leds_skia(
+                pixmap,
+                el,
+                center_x,
+                center_y,
+                res_scale,
+                rpm,
+                rpm_max,
+                rpm_redline,
+            ),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -264,7 +766,7 @@ mod tests {
     use super::*;
     use eframe::egui;
 
-    fn create_test_element() -> OverlayElement {
+    fn create_test_element(style: &str) -> OverlayElement {
         let mut opts = serde_json::Map::new();
         opts.insert(
             "rpm_max".to_string(),
@@ -273,6 +775,10 @@ mod tests {
         opts.insert(
             "rpm_redline".to_string(),
             serde_json::Value::Number(6500.into()),
+        );
+        opts.insert(
+            "style".to_string(),
+            serde_json::Value::String(style.to_string()),
         );
 
         OverlayElement {
@@ -286,114 +792,121 @@ mod tests {
     }
 
     #[test]
-    fn test_rpm_overlay_render_skia() {
-        let el = create_test_element();
-        let mut data = vec![0; 800 * 600 * 4];
-        let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
+    fn test_rpm_overlay_render_skia_all_styles() {
+        let styles = ["bar", "dial", "leds"];
+        for style in styles {
+            let el = create_test_element(style);
+            let mut data = vec![0; 800 * 600 * 4];
+            let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
 
-        let bar = RpmOverlay;
+            let overlay = RpmOverlay;
 
-        // Render without state
-        bar.render_skia(
-            &mut pixmap,
-            &el,
-            &crate::telemetry::TelemetryState {
-                current_sample: None,
-                previous_laps: vec![],
-                best_lap: None,
-                projection_ms: None,
-            },
-            None,
-            None,
-        );
+            // Render without state
+            overlay.render_skia(
+                &mut pixmap,
+                &el,
+                &crate::telemetry::TelemetryState {
+                    current_sample: None,
+                    previous_laps: vec![],
+                    best_lap: None,
+                    projection_ms: None,
+                },
+                None,
+                None,
+            );
 
-        // Render with state (below redline)
-        let mut sample = crate::overlay::common::create_test_sample();
-        sample.engine_speed_rpm = 3000.0;
-        bar.render_skia(
-            &mut pixmap,
-            &el,
-            &crate::telemetry::TelemetryState {
-                current_sample: Some(sample.clone()),
-                previous_laps: vec![],
-                best_lap: None,
-                projection_ms: None,
-            },
-            None,
-            None,
-        );
+            // Render with state (below redline)
+            let mut sample = crate::overlay::common::create_test_sample();
+            sample.engine_speed_rpm = 3000.0;
+            overlay.render_skia(
+                &mut pixmap,
+                &el,
+                &crate::telemetry::TelemetryState {
+                    current_sample: Some(sample.clone()),
+                    previous_laps: vec![],
+                    best_lap: None,
+                    projection_ms: None,
+                },
+                None,
+                None,
+            );
 
-        // Render with state (above redline)
-        sample.engine_speed_rpm = 6800.0;
-        bar.render_skia(
-            &mut pixmap,
-            &el,
-            &crate::telemetry::TelemetryState {
-                current_sample: Some(sample),
-                previous_laps: vec![],
-                best_lap: None,
-                projection_ms: None,
-            },
-            None,
-            None,
-        );
+            // Render with state (above redline)
+            sample.engine_speed_rpm = 6800.0;
+            overlay.render_skia(
+                &mut pixmap,
+                &el,
+                &crate::telemetry::TelemetryState {
+                    current_sample: Some(sample),
+                    previous_laps: vec![],
+                    best_lap: None,
+                    projection_ms: None,
+                },
+                None,
+                None,
+            );
+        }
     }
 
     #[test]
-    fn test_rpm_overlay_render_ui() {
-        let el = create_test_element();
-        let ctx = egui::Context::default();
-        let _ = ctx.run_ui(egui::RawInput::default(), |ctx| {
-            egui::CentralPanel::default().show_inside(ctx, |ui| {
-                let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+    fn test_rpm_overlay_render_ui_all_styles() {
+        let styles = ["bar", "dial", "leds"];
+        for style in styles {
+            let el = create_test_element(style);
+            let ctx = egui::Context::default();
+            let _ = ctx.run_ui(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show_inside(ctx, |ui| {
+                    let rect =
+                        egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
 
-                let bar = RpmOverlay;
+                    let overlay = RpmOverlay;
 
-                // Render without state
-                bar.render_ui(
-                    ui,
-                    rect,
-                    &el,
-                    &crate::telemetry::TelemetryState {
-                        current_sample: None,
-                        previous_laps: vec![],
-                        best_lap: None,
-                        projection_ms: None,
-                    },
-                    None,
-                );
+                    // Render without state
+                    overlay.render_ui(
+                        ui,
+                        rect,
+                        &el,
+                        &crate::telemetry::TelemetryState {
+                            current_sample: None,
+                            previous_laps: vec![],
+                            best_lap: None,
+                            projection_ms: None,
+                        },
+                        None,
+                    );
 
-                // Render with state (below redline)
-                let mut sample = crate::overlay::common::create_test_sample();
-                sample.engine_speed_rpm = 3000.0;
-                bar.render_ui(
-                    ui,
-                    rect,
-                    &el,
-                    &crate::telemetry::TelemetryState {
-                        current_sample: Some(sample.clone()),
-                        previous_laps: vec![],
-                        best_lap: None,
-                        projection_ms: None,
-                    },
-                    None,
-                );
+                    // Render with state (below redline)
+                    let mut sample = crate::overlay::common::create_test_sample();
+                    sample.engine_speed_rpm = 3000.0;
+                    overlay.render_ui(
+                        ui,
+                        rect,
+                        &el,
+                        &crate::telemetry::TelemetryState {
+                            current_sample: Some(sample.clone()),
+                            previous_laps: vec![],
+                            best_lap: None,
+                            projection_ms: None,
+                        },
+                        None,
+                    );
 
-                // Render with state (above redline)
-                sample.engine_speed_rpm = 6800.0;
-                bar.render_ui(
-                    ui,
-                    rect,
-                    &el,
-                    &crate::telemetry::TelemetryState {
-                        current_sample: Some(sample),
-                        previous_laps: vec![],
-                        best_lap: None,
-                        projection_ms: None,
-                    },
-                    None,
-                );
+                    // Render with state (above redline)
+                    sample.engine_speed_rpm = 6800.0;
+                    overlay.render_ui(
+                        ui,
+                        rect,
+                        &el,
+                        &crate::telemetry::TelemetryState {
+                            current_sample: Some(sample),
+                            previous_laps: vec![],
+                            best_lap: None,
+                            projection_ms: None,
+                        },
+                        None,
+                    );
+                });
             });
-        });
+        }
     }
 }

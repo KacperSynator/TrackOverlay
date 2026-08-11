@@ -57,7 +57,8 @@
       "scale": 1.0,
       "options": {
         "rpm_max": 6500,
-        "rpm_redline": 6000
+        "rpm_redline": 6000,
+        "style": "Bar"
       }
     }
   ],
