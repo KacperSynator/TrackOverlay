@@ -173,16 +173,7 @@ fn render_export_end(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
     needs_telemetry_recalc
 }
 
-fn render_export_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
-    ui.heading("Export");
-    let needs_telemetry_recalc_start = render_export_start(app, ui);
-    let needs_telemetry_recalc_end = render_export_end(app, ui);
-
-    if ui.button("Export Final Video").clicked() {
-        app.dialog_mode = DialogMode::PickExportOutput;
-        app.file_dialog.save_file();
-    }
-
+fn render_export_progress(app: &MyApp, ui: &mut egui::Ui) {
     if let Some(arc) = &app.active_export_progress {
         if let Ok(lock) = arc.lock() {
             let done = lock.frames_done;
@@ -227,6 +218,19 @@ fn render_export_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
     } else if let Some(msg) = &app.export_progress {
         ui.label(msg);
     }
+}
+
+fn render_export_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
+    ui.heading("Export");
+    let needs_telemetry_recalc_start = render_export_start(app, ui);
+    let needs_telemetry_recalc_end = render_export_end(app, ui);
+
+    if ui.button("Export Final Video").clicked() {
+        app.dialog_mode = DialogMode::PickExportOutput;
+        app.file_dialog.save_file();
+    }
+
+    render_export_progress(app, ui);
 
     needs_telemetry_recalc_start || needs_telemetry_recalc_end
 }
