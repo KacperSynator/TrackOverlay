@@ -25,9 +25,9 @@ impl RpmStyle {
 
     fn as_str(&self) -> &'static str {
         match self {
-            RpmStyle::Bar => "bar",
-            RpmStyle::Dial => "dial",
-            RpmStyle::Leds => "leds",
+            RpmStyle::Bar => "Bar",
+            RpmStyle::Dial => "Dial",
+            RpmStyle::Leds => "Leds",
         }
     }
 }
