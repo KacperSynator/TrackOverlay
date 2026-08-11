@@ -28,18 +28,16 @@ pub fn extract_gopro_gps(video_path: &str) -> Result<Vec<(i64, f64, f64)>> {
     // 2. Dump stream data using ffmpeg to a temporary file
     let temp_gpmf = tempfile::NamedTempFile::new()?;
     let status = Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-i",
-            video_path,
-            "-map",
-            &format!("0:{}", stream_idx),
-            "-c",
-            "copy",
-            "-f",
-            "data",
-            temp_gpmf.path().to_str().unwrap(),
-        ])
+        .arg("-y")
+        .arg("-i")
+        .arg(video_path)
+        .arg("-map")
+        .arg(format!("0:{}", stream_idx))
+        .arg("-c")
+        .arg("copy")
+        .arg("-f")
+        .arg("data")
+        .arg(temp_gpmf.path())
         .status()?;
 
     if !status.success() {
