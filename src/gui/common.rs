@@ -1,12 +1,27 @@
 pub fn parse_time_str(s: &str) -> Option<f64> {
-    let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() == 2 {
+    let s = s.trim();
+    let is_negative = s.starts_with('-');
+    let s_unsigned = if is_negative { &s[1..] } else { s };
+
+    let parts: Vec<&str> = s_unsigned.split(':').collect();
+    let val = if parts.len() == 2 {
         let m: f64 = parts[0].parse().ok()?;
         let sec: f64 = parts[1].parse().ok()?;
-        Some(m * 60.0 + sec)
+        // If there are negative values in parts, they shouldn't exist after removing the leading '-'
+        // but if someone types "1:-30", `parts[1]` will have `-30` which parses as negative, we want to reject that.
+        if m < 0.0 || sec < 0.0 {
+            return None;
+        }
+        m * 60.0 + sec
     } else {
-        s.parse().ok()
-    }
+        let val: f64 = s_unsigned.parse().ok()?;
+        if val < 0.0 {
+            return None;
+        }
+        val
+    };
+
+    Some(if is_negative { -val } else { val })
 }
 
 pub fn format_time_str(seconds: f64) -> String {
@@ -55,11 +70,17 @@ mod tests {
 
     #[test]
     fn test_parse_time_str_negative_times() {
-        assert_eq!(parse_time_str("-1:30"), Some(-30.0));
+        assert_eq!(parse_time_str("-1:30"), Some(-90.0));
+        assert_eq!(parse_time_str("-0:30"), Some(-30.0));
+        assert_eq!(parse_time_str("-90"), Some(-90.0));
+        assert_eq!(parse_time_str(" -1:30 "), Some(-90.0));
     }
 
     #[test]
     fn test_parse_time_str_invalid() {
+        assert_eq!(parse_time_str("-1:-30"), None);
+        assert_eq!(parse_time_str("1:-30"), None);
+        assert_eq!(parse_time_str("1:-30:00"), None);
         assert_eq!(parse_time_str("abc"), None);
         assert_eq!(parse_time_str("1:2:3"), None);
         assert_eq!(parse_time_str("1:abc"), None);
