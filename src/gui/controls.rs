@@ -286,11 +286,13 @@ fn render_auto_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
                 TelemetryLog {
                     samples: t.samples.clone(),
                     start_time_utc: t.start_time_utc,
+                    parsed_speed_source: t.parsed_speed_source.clone(),
                 }
             } else {
                 TelemetryLog {
                     samples: vec![],
                     start_time_utc: None,
+                    parsed_speed_source: crate::project::SpeedSource::Auto,
                 }
             };
             let max_auto_sync_offset_ms = app.config.sync.max_auto_sync_offset_ms;

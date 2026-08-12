@@ -112,6 +112,7 @@ impl MyApp {
             let temp_log = TelemetryLog {
                 samples: view.samples.to_vec(),
                 start_time_utc: view.start_time_utc,
+                parsed_speed_source: crate::project::SpeedSource::Auto,
             };
             self.trackmap = TrackMap::from_telemetry(&temp_log, &self.telemetry_laps);
         }

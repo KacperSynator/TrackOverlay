@@ -46,12 +46,14 @@ fn main() -> eframe::Result {
                     TelemetryLog {
                         samples: vec![],
                         start_time_utc: None,
+                        parsed_speed_source: track_overlay::project::SpeedSource::Auto,
                     }
                 })
         } else {
             TelemetryLog {
                 samples: vec![],
                 start_time_utc: None,
+                parsed_speed_source: track_overlay::project::SpeedSource::Auto,
             }
         };
 

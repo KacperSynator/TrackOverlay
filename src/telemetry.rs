@@ -79,6 +79,7 @@ pub struct TelemetryState {
 pub struct TelemetryLog {
     pub samples: Vec<TelemetrySample>,
     pub start_time_utc: Option<DateTime<Utc>>,
+    pub parsed_speed_source: crate::project::SpeedSource,
 }
 
 impl TelemetryLog {
@@ -182,6 +183,7 @@ impl TelemetryLog {
         Ok(Self {
             samples,
             start_time_utc,
+            parsed_speed_source: actual_speed_source,
         })
     }
 

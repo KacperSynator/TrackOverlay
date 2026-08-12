@@ -41,11 +41,13 @@ fn handle_pick_export_output(app: &mut MyApp, path_buf: PathBuf) {
         TelemetryLog {
             samples: t.samples.clone(),
             start_time_utc: t.start_time_utc,
+            parsed_speed_source: t.parsed_speed_source.clone(),
         }
     } else {
         TelemetryLog {
             samples: vec![],
             start_time_utc: None,
+            parsed_speed_source: crate::project::SpeedSource::Auto,
         }
     };
 
