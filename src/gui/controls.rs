@@ -119,6 +119,12 @@ fn render_settings_section(app: &mut MyApp, ui: &mut egui::Ui) {
                     changed = true;
                 }
             });
+
+        if speed_source == crate::project::SpeedSource::Auto {
+            if let Some(log) = &app.telemetry {
+                ui.label(format!("(Currently using {:?})", log.parsed_speed_source));
+            }
+        }
     });
 
     if changed {
