@@ -121,8 +121,9 @@ fn render_settings_section(app: &mut MyApp, ui: &mut egui::Ui) {
             });
 
         if speed_source == crate::project::SpeedSource::Auto {
+            #[allow(clippy::collapsible_if)]
             if let Some(log) = &app.telemetry {
-                ui.label(format!("(Currently using {:?})", log.parsed_speed_source));
+                ui.label(format!("(Using {:?})", log.parsed_speed_source));
             }
         }
     });
