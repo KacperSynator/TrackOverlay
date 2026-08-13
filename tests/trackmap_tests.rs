@@ -80,6 +80,7 @@ fn test_trackmap_projection() {
     let log = TelemetryLog {
         samples,
         start_time_utc: None,
+        parsed_speed_source: track_overlay::project::SpeedSource::Auto,
     };
     let laps = log.extract_laps();
 

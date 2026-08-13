@@ -56,6 +56,7 @@ fn generate_lap_data(num_laps: u32) -> (Vec<(i64, f64, f64)>, TelemetryLog) {
     let telemetry_data = TelemetryLog {
         samples: telem_samples,
         start_time_utc: None,
+        parsed_speed_source: track_overlay::project::SpeedSource::Auto,
     };
 
     let gopro_offset = -5000;
@@ -104,6 +105,7 @@ fn generate_lissajous_data() -> (Vec<(i64, f64, f64)>, TelemetryLog) {
     let telemetry = TelemetryLog {
         samples,
         start_time_utc: None,
+        parsed_speed_source: track_overlay::project::SpeedSource::Auto,
     };
 
     let target_offset = 54300; // 54.3 seconds

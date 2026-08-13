@@ -34,6 +34,7 @@ fn test_custom_config_serialization() {
         ],
         export_start_ms: Some(100),
         export_end_ms: None,
+        speed_source: track_overlay::project::SpeedSource::Auto,
     };
 
     // Test serialization
@@ -69,6 +70,7 @@ fn test_config_save_and_load() {
         }],
         export_start_ms: None,
         export_end_ms: Some(5000),
+        speed_source: track_overlay::project::SpeedSource::Auto,
     };
 
     let temp_file = NamedTempFile::new().expect("Failed to create temp file");

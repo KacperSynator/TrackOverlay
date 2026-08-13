@@ -20,7 +20,8 @@ fn test_telemetry_parsing_and_interpolation() {
 "#;
     file.write_all(csv_content.as_bytes()).unwrap();
 
-    let log = TelemetryLog::load_csv(file.path()).unwrap();
+    let log =
+        TelemetryLog::load_csv(file.path(), track_overlay::project::SpeedSource::Auto).unwrap();
     assert_eq!(log.samples.len(), 2);
 
     let s1 = &log.samples[0];
@@ -68,7 +69,8 @@ fn test_telemetry_view_truncation_and_laps() {
 5.000,1005.000,2,0,0,1,0.0,50.0,20.0,0,0,60.0,0,0,0,0,0,0,100.0,0,1,1000,10,10,90,30,100
 "#;
     file.write_all(csv_content.as_bytes()).unwrap();
-    let log = TelemetryLog::load_csv(file.path()).unwrap();
+    let log =
+        TelemetryLog::load_csv(file.path(), track_overlay::project::SpeedSource::Auto).unwrap();
 
     assert_eq!(log.samples.len(), 6);
     assert_eq!(log.samples[2].time_ms, 2000); // Lap 1 starts

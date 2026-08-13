@@ -115,6 +115,7 @@ pub fn export_video(
     let temp_log = crate::telemetry::TelemetryLog {
         samples: telemetry_view.samples.to_vec(),
         start_time_utc: telemetry_view.start_time_utc,
+        parsed_speed_source: crate::project::SpeedSource::Auto,
     };
     let trackmap =
         crate::trackmap::TrackMap::from_telemetry(&temp_log, &telemetry_view.extract_laps());

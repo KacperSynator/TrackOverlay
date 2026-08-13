@@ -92,6 +92,52 @@ fn render_settings_section(app: &mut MyApp, ui: &mut egui::Ui) {
     ui.heading("Settings");
     ui.checkbox(&mut app.config.flip_vertical, "Flip Video Vertically");
     ui.checkbox(&mut app.config.flip_horizontal, "Flip Video Horizontally");
+
+    let mut speed_source = app.config.speed_source.clone();
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        ui.label("Speed Source:");
+        egui::ComboBox::from_id_salt("speed_source_combo")
+            .selected_text(format!("{:?}", speed_source))
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_value(&mut speed_source, crate::project::SpeedSource::Auto, "Auto")
+                    .clicked()
+                {
+                    changed = true;
+                }
+                if ui
+                    .selectable_value(&mut speed_source, crate::project::SpeedSource::Gps, "Gps")
+                    .clicked()
+                {
+                    changed = true;
+                }
+                if ui
+                    .selectable_value(&mut speed_source, crate::project::SpeedSource::Obd, "Obd")
+                    .clicked()
+                {
+                    changed = true;
+                }
+            });
+
+        if speed_source == crate::project::SpeedSource::Auto {
+            #[allow(clippy::collapsible_if)]
+            if let Some(log) = &app.telemetry {
+                ui.label(format!("(Using {:?})", log.parsed_speed_source));
+            }
+        }
+    });
+
+    if changed {
+        app.config.speed_source = speed_source;
+        if let Ok(log) = crate::telemetry::TelemetryLog::load_csv(
+            &app.config.telemetry_path,
+            app.config.speed_source.clone(),
+        ) {
+            app.telemetry = Some(log);
+            app.recalculate_telemetry();
+        }
+    }
 }
 
 fn render_export_start(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
@@ -247,11 +293,13 @@ fn render_auto_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
                 TelemetryLog {
                     samples: t.samples.clone(),
                     start_time_utc: t.start_time_utc,
+                    parsed_speed_source: t.parsed_speed_source.clone(),
                 }
             } else {
                 TelemetryLog {
                     samples: vec![],
                     start_time_utc: None,
+                    parsed_speed_source: crate::project::SpeedSource::Auto,
                 }
             };
             let max_auto_sync_offset_ms = app.config.sync.max_auto_sync_offset_ms;

@@ -26,12 +26,14 @@ fn test_auto_correlate_empty_data() {
     let empty_telemetry = TelemetryLog {
         samples: vec![],
         start_time_utc: None,
+        parsed_speed_source: track_overlay::project::SpeedSource::Auto,
     };
 
     let one_gopro = vec![(0, 0.0, 0.0)];
     let one_telemetry = TelemetryLog {
         samples: vec![create_sample(0, 0.0, 0.0, None)],
         start_time_utc: None,
+        parsed_speed_source: track_overlay::project::SpeedSource::Auto,
     };
 
     assert_eq!(
@@ -84,6 +86,7 @@ fn test_auto_correlate_lap_based() {
     let telemetry_data = TelemetryLog {
         samples: telem_samples,
         start_time_utc: None,
+        parsed_speed_source: track_overlay::project::SpeedSource::Auto,
     };
     let gopro_offset = -5000;
     let mut gopro_data = Vec::new();
@@ -117,6 +120,7 @@ fn test_auto_correlate_distance_fallback() {
     let telemetry_data = TelemetryLog {
         samples: telem_samples,
         start_time_utc: None,
+        parsed_speed_source: track_overlay::project::SpeedSource::Auto,
     };
     let mut gopro_data_zero = Vec::new();
     for g_time in (0..20000).step_by(100) {
@@ -145,6 +149,7 @@ fn test_auto_correlate_failure() {
     let telemetry_data = TelemetryLog {
         samples: telem_samples,
         start_time_utc: None,
+        parsed_speed_source: track_overlay::project::SpeedSource::Auto,
     };
 
     // Make gopro data very long but physically un-correlatable, actually if we make it such that it doesn't even

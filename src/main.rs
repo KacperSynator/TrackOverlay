@@ -40,17 +40,20 @@ fn main() -> eframe::Result {
 
         let telemetry = if config.telemetry_path.exists() {
             info!("Loading telemetry from {:?}", config.telemetry_path);
-            TelemetryLog::load_csv(&config.telemetry_path).unwrap_or_else(|e| {
-                error!("Failed to load telemetry: {}", e);
-                TelemetryLog {
-                    samples: vec![],
-                    start_time_utc: None,
-                }
-            })
+            TelemetryLog::load_csv(&config.telemetry_path, config.speed_source.clone())
+                .unwrap_or_else(|e| {
+                    error!("Failed to load telemetry: {}", e);
+                    TelemetryLog {
+                        samples: vec![],
+                        start_time_utc: None,
+                        parsed_speed_source: track_overlay::project::SpeedSource::Auto,
+                    }
+                })
         } else {
             TelemetryLog {
                 samples: vec![],
                 start_time_utc: None,
+                parsed_speed_source: track_overlay::project::SpeedSource::Auto,
             }
         };
 

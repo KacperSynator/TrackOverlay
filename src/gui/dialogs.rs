@@ -29,7 +29,7 @@ fn handle_pick_video(app: &mut MyApp, ctx: &egui::Context, path_buf: PathBuf) {
 
 fn handle_pick_telemetry(app: &mut MyApp, path_buf: PathBuf) {
     app.config.telemetry_path = path_buf.clone();
-    if let Ok(log) = TelemetryLog::load_csv(&path_buf) {
+    if let Ok(log) = TelemetryLog::load_csv(&path_buf, app.config.speed_source.clone()) {
         app.telemetry = Some(log);
         app.recalculate_telemetry();
     }
@@ -41,11 +41,13 @@ fn handle_pick_export_output(app: &mut MyApp, path_buf: PathBuf) {
         TelemetryLog {
             samples: t.samples.clone(),
             start_time_utc: t.start_time_utc,
+            parsed_speed_source: t.parsed_speed_source.clone(),
         }
     } else {
         TelemetryLog {
             samples: vec![],
             start_time_utc: None,
+            parsed_speed_source: crate::project::SpeedSource::Auto,
         }
     };
 
