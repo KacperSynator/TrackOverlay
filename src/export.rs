@@ -57,7 +57,24 @@ pub fn export_video(
     let temp_path = output_path.with_extension("temp.mp4");
     let mut output_ctx = ffmpeg::format::output(&temp_path)?;
 
-    let encoder = ffmpeg::encoder::find(ffmpeg::codec::Id::H264)
+    let mut encoder = None;
+
+    if config.use_hardware_acceleration {
+        let hw_encoders = ["h264_nvenc", "h264_amf", "h264_qsv", "h264_videotoolbox"];
+        for hw_name in hw_encoders.iter() {
+            if let Some(enc) = ffmpeg::encoder::find_by_name(hw_name) {
+                println!("Using hardware encoder: {}", hw_name);
+                encoder = Some(enc);
+                break;
+            }
+        }
+    }
+
+    let encoder = encoder
+        .or_else(|| {
+            println!("Using default software H264 encoder");
+            ffmpeg::encoder::find(ffmpeg::codec::Id::H264)
+        })
         .ok_or_else(|| anyhow!("H264 encoder not found"))?;
 
     let mut output_stream = output_ctx.add_stream(encoder)?;
