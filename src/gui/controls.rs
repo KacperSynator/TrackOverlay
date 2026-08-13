@@ -337,14 +337,19 @@ fn render_auto_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
 
 fn render_manual_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
     let mut needs_telemetry_recalc = false;
+
+    let mut offset_sec = app.config.sync.offset_ms as f64 / 1000.0;
+
     if ui
         .add(
-            egui::DragValue::new(&mut app.config.sync.offset_ms)
-                .range(-120000..=120000)
-                .prefix("Sync Offset (ms): "),
+            egui::DragValue::new(&mut offset_sec)
+                .range(-120.0..=120.0)
+                .speed(0.001)
+                .prefix("Sync Offset (s): "),
         )
         .changed()
     {
+        app.config.sync.offset_ms = (offset_sec * 1000.0).round() as i64;
         needs_telemetry_recalc = true;
     }
     needs_telemetry_recalc
