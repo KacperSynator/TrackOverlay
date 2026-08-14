@@ -337,13 +337,19 @@ fn render_auto_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
 
 fn render_manual_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
     let mut needs_telemetry_recalc = false;
+
+    let mut offset_sec = app.config.sync.offset_ms as f64 / 1000.0;
+
     if ui
         .add(
-            egui::Slider::new(&mut app.config.sync.offset_ms, -120000..=120000)
-                .text("Sync Offset (ms)"),
+            egui::DragValue::new(&mut offset_sec)
+                .range(-120.0..=120.0)
+                .speed(0.001)
+                .prefix("Sync Offset (s): "),
         )
         .changed()
     {
+        app.config.sync.offset_ms = (offset_sec * 1000.0).round() as i64;
         needs_telemetry_recalc = true;
     }
     needs_telemetry_recalc
@@ -365,27 +371,39 @@ fn render_sync_section(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
 }
 
 fn render_layout_editor_section(app: &mut MyApp, ui: &mut egui::Ui) {
-    ui.label("Layout Editor");
+    ui.collapsing("Layout Editor", |ui| {
+        for el in app.config.elements.iter_mut() {
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut el.enabled, format!("{:?}", el.kind));
+                ui.add(
+                    egui::DragValue::new(&mut el.x)
+                        .range(0.0..=1.0)
+                        .speed(0.01)
+                        .prefix("X: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut el.y)
+                        .range(0.0..=1.0)
+                        .speed(0.01)
+                        .prefix("Y: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut el.scale)
+                        .range(0.5..=3.0)
+                        .speed(0.05)
+                        .prefix("Scale: "),
+                );
+            });
 
-    for el in app.config.elements.iter_mut() {
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut el.enabled, format!("{:?}", el.kind));
-            ui.add(egui::Slider::new(&mut el.x, 0.0..=1.0).text("X"));
-            ui.add(egui::Slider::new(&mut el.y, 0.0..=1.0).text("Y"));
-            ui.add(egui::Slider::new(&mut el.scale, 0.5..=3.0).text("Scale"));
-        });
-
-        crate::overlay::get_impl(&el.kind).custom_ui(ui, el);
-    }
+            crate::overlay::get_impl(&el.kind).custom_ui(ui, el);
+        }
+    });
 }
 
 pub fn render_controls_window(app: &mut MyApp, ctx: &egui::Context) {
     egui::Window::new("Controls").show(ctx, |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
             render_project_files_section(app, ui);
-            ui.separator();
-
-            render_settings_section(app, ui);
             ui.separator();
 
             let mut needs_telemetry_recalc = render_export_section(app, ui);
@@ -396,8 +414,11 @@ pub fn render_controls_window(app: &mut MyApp, ctx: &egui::Context) {
             if needs_telemetry_recalc {
                 app.recalculate_telemetry();
             }
-
             ui.separator();
+
+            render_settings_section(app, ui);
+            ui.separator();
+
             render_layout_editor_section(app, ui);
         });
     });
