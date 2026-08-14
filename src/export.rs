@@ -58,6 +58,7 @@ pub fn export_video(
     let mut output_ctx = ffmpeg::format::output(&temp_path)?;
 
     let mut active_encoder = None;
+    let mut target_pix_fmt = ffmpeg::format::Pixel::YUV420P;
 
     if config.use_hardware_acceleration {
         let hw_encoders = ["h264_nvenc", "h264_amf", "h264_qsv", "h264_videotoolbox"];
@@ -67,16 +68,22 @@ pub fn export_video(
                 let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
                 encoder_ctx_video.set_width(width);
                 encoder_ctx_video.set_height(height);
-                encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
+
+                let pix_fmt = if *hw_name == "h264_qsv" {
+                    ffmpeg::format::Pixel::NV12
+                } else {
+                    ffmpeg::format::Pixel::YUV420P
+                };
+
+                encoder_ctx_video.set_format(pix_fmt);
                 encoder_ctx_video.set_time_base(time_base);
                 encoder_ctx_video.set_frame_rate(Some(frame_rate));
 
-                let mut opts = ffmpeg::Dictionary::new();
-                opts.set("preset", "medium");
-
+                let opts = ffmpeg::Dictionary::new();
                 if let Ok(opened) = encoder_ctx_video.open_as_with(enc, opts) {
                     println!("Successfully opened hardware encoder: {}", hw_name);
                     active_encoder = Some((enc, opened));
+                    target_pix_fmt = pix_fmt;
                     break;
                 } else {
                     println!("Failed to open hardware encoder: {}", hw_name);
@@ -97,6 +104,7 @@ pub fn export_video(
         encoder_ctx_video.set_width(width);
         encoder_ctx_video.set_height(height);
         encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
+        target_pix_fmt = ffmpeg::format::Pixel::YUV420P;
         encoder_ctx_video.set_time_base(time_base);
         encoder_ctx_video.set_frame_rate(Some(frame_rate));
 
@@ -125,7 +133,7 @@ pub fn export_video(
         ffmpeg::format::Pixel::RGBA,
         width,
         height,
-        ffmpeg::format::Pixel::YUV420P,
+        target_pix_fmt,
         width,
         height,
         ffmpeg::software::scaling::flag::Flags::FAST_BILINEAR,
@@ -134,6 +142,7 @@ pub fn export_video(
     let mut decoded = ffmpeg::frame::Video::empty();
     let mut rgba_frame = ffmpeg::frame::Video::empty();
     let mut yuv_frame = ffmpeg::frame::Video::empty();
+    yuv_frame.set_format(target_pix_fmt);
 
     // Create telemetry view to handle bounding and laps cleanly
     let telemetry_view = crate::telemetry::TelemetryView::new(
