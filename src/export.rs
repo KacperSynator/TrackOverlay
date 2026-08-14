@@ -57,41 +57,56 @@ pub fn export_video(
     let temp_path = output_path.with_extension("temp.mp4");
     let mut output_ctx = ffmpeg::format::output(&temp_path)?;
 
-    let mut encoder = None;
+    let mut active_encoder = None;
 
     if config.use_hardware_acceleration {
         let hw_encoders = ["h264_nvenc", "h264_amf", "h264_qsv", "h264_videotoolbox"];
         for hw_name in hw_encoders.iter() {
             if let Some(enc) = ffmpeg::encoder::find_by_name(hw_name) {
-                println!("Using hardware encoder: {}", hw_name);
-                encoder = Some(enc);
-                break;
+                let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(enc);
+                let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
+                encoder_ctx_video.set_width(width);
+                encoder_ctx_video.set_height(height);
+                encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
+                encoder_ctx_video.set_time_base(time_base);
+                encoder_ctx_video.set_frame_rate(Some(frame_rate));
+
+                let mut opts = ffmpeg::Dictionary::new();
+                opts.set("preset", "medium");
+
+                if let Ok(opened) = encoder_ctx_video.open_as_with(enc, opts) {
+                    println!("Successfully opened hardware encoder: {}", hw_name);
+                    active_encoder = Some((enc, opened));
+                    break;
+                } else {
+                    println!("Failed to open hardware encoder: {}", hw_name);
+                }
             }
         }
     }
 
-    let encoder = encoder
-        .or_else(|| {
-            println!("Using default software H264 encoder");
-            ffmpeg::encoder::find(ffmpeg::codec::Id::H264)
-        })
-        .ok_or_else(|| anyhow!("H264 encoder not found"))?;
+    let (codec, mut encoder) = if let Some(opened_enc) = active_encoder {
+        opened_enc
+    } else {
+        println!("Using default software H264 encoder");
+        let enc = ffmpeg::encoder::find(ffmpeg::codec::Id::H264)
+            .ok_or_else(|| anyhow!("H264 encoder not found"))?;
 
-    let mut output_stream = output_ctx.add_stream(encoder)?;
+        let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(enc);
+        let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
+        encoder_ctx_video.set_width(width);
+        encoder_ctx_video.set_height(height);
+        encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
+        encoder_ctx_video.set_time_base(time_base);
+        encoder_ctx_video.set_frame_rate(Some(frame_rate));
 
-    let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(encoder);
+        let mut opts = ffmpeg::Dictionary::new();
+        opts.set("preset", "medium");
+        let opened = encoder_ctx_video.open_as_with(enc, opts)?;
+        (enc, opened)
+    };
 
-    let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
-    encoder_ctx_video.set_width(width);
-    encoder_ctx_video.set_height(height);
-    encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
-    encoder_ctx_video.set_time_base(time_base);
-    encoder_ctx_video.set_frame_rate(Some(frame_rate));
-
-    let mut opts = ffmpeg::Dictionary::new();
-    opts.set("preset", "medium");
-    let mut encoder = encoder_ctx_video.open_as_with(encoder, opts)?;
-
+    let mut output_stream = output_ctx.add_stream(codec)?;
     output_stream.set_parameters(&encoder);
 
     output_ctx.write_header()?;
