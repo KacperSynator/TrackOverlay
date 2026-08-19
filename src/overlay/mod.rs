@@ -104,6 +104,24 @@ mod tests {
     }
 
     #[test]
+    fn test_get_impl_all_variants() {
+        let kinds = [
+            OverlayKind::SpeedReadout,
+            OverlayKind::GForceMeter,
+            OverlayKind::LapTimer,
+            OverlayKind::AdvancedLapTimer,
+            OverlayKind::TrackMap,
+            OverlayKind::ThrottleBar,
+            OverlayKind::RpmOverlay,
+        ];
+
+        for kind in kinds {
+            // Verify that calling get_impl does not panic for any known kind
+            let _impl = get_impl(&kind);
+        }
+    }
+
+    #[test]
     fn test_render_overlay_skia() {
         let mut data = vec![0; 800 * 600 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
