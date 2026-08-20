@@ -79,10 +79,12 @@ impl MyApp {
     }
 
     pub fn format_time(ms: i64) -> String {
-        let total_seconds = ms / 1000;
+        let sign = if ms < 0 { "-" } else { "" };
+        let abs_ms = ms.abs();
+        let total_seconds = abs_ms / 1000;
         let minutes = total_seconds / 60;
         let seconds = total_seconds % 60;
-        format!("{:02}:{:02}", minutes, seconds)
+        format!("{}{:02}:{:02}", sign, minutes, seconds)
     }
 
     pub fn clamp_playhead_to_trim(&mut self) {
@@ -159,5 +161,29 @@ impl eframe::App for MyApp {
         }
 
         self.build_ui(ui);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_time_positive() {
+        assert_eq!(MyApp::format_time(0), "00:00");
+        assert_eq!(MyApp::format_time(999), "00:00");
+        assert_eq!(MyApp::format_time(1000), "00:01");
+        assert_eq!(MyApp::format_time(59999), "00:59");
+        assert_eq!(MyApp::format_time(60000), "01:00");
+        assert_eq!(MyApp::format_time(61000), "01:01");
+        assert_eq!(MyApp::format_time(3599000), "59:59");
+        assert_eq!(MyApp::format_time(3600000), "60:00");
+    }
+
+    #[test]
+    fn test_format_time_negative() {
+        assert_eq!(MyApp::format_time(-999), "-00:00");
+        assert_eq!(MyApp::format_time(-1000), "-00:01");
+        assert_eq!(MyApp::format_time(-61000), "-01:01");
     }
 }
