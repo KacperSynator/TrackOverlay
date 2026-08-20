@@ -64,6 +64,7 @@
   ],
   "flip_vertical": false,
   "flip_horizontal": false,
+  "use_hardware_acceleration": true,
   "export_start_ms": null,
   "export_end_ms": null,
   "speed_source": "Auto"

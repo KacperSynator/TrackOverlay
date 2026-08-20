@@ -57,24 +57,64 @@ pub fn export_video(
     let temp_path = output_path.with_extension("temp.mp4");
     let mut output_ctx = ffmpeg::format::output(&temp_path)?;
 
-    let encoder = ffmpeg::encoder::find(ffmpeg::codec::Id::H264)
-        .ok_or_else(|| anyhow!("H264 encoder not found"))?;
+    let mut active_encoder = None;
+    let mut target_pix_fmt = ffmpeg::format::Pixel::YUV420P;
 
-    let mut output_stream = output_ctx.add_stream(encoder)?;
+    if config.use_hardware_acceleration {
+        let hw_encoders = ["h264_nvenc", "h264_amf", "h264_qsv", "h264_videotoolbox"];
+        for hw_name in hw_encoders.iter() {
+            if let Some(enc) = ffmpeg::encoder::find_by_name(hw_name) {
+                let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(enc);
+                let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
+                encoder_ctx_video.set_width(width);
+                encoder_ctx_video.set_height(height);
 
-    let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(encoder);
+                let pix_fmt = if *hw_name == "h264_qsv" {
+                    ffmpeg::format::Pixel::NV12
+                } else {
+                    ffmpeg::format::Pixel::YUV420P
+                };
 
-    let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
-    encoder_ctx_video.set_width(width);
-    encoder_ctx_video.set_height(height);
-    encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
-    encoder_ctx_video.set_time_base(time_base);
-    encoder_ctx_video.set_frame_rate(Some(frame_rate));
+                encoder_ctx_video.set_format(pix_fmt);
+                encoder_ctx_video.set_time_base(time_base);
+                encoder_ctx_video.set_frame_rate(Some(frame_rate));
 
-    let mut opts = ffmpeg::Dictionary::new();
-    opts.set("preset", "medium");
-    let mut encoder = encoder_ctx_video.open_as_with(encoder, opts)?;
+                let opts = ffmpeg::Dictionary::new();
+                if let Ok(opened) = encoder_ctx_video.open_as_with(enc, opts) {
+                    println!("Successfully opened hardware encoder: {}", hw_name);
+                    active_encoder = Some((enc, opened));
+                    target_pix_fmt = pix_fmt;
+                    break;
+                } else {
+                    println!("Failed to open hardware encoder: {}", hw_name);
+                }
+            }
+        }
+    }
 
+    let (codec, mut encoder) = if let Some(opened_enc) = active_encoder {
+        opened_enc
+    } else {
+        println!("Using default software H264 encoder");
+        let enc = ffmpeg::encoder::find(ffmpeg::codec::Id::H264)
+            .ok_or_else(|| anyhow!("H264 encoder not found"))?;
+
+        let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(enc);
+        let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
+        encoder_ctx_video.set_width(width);
+        encoder_ctx_video.set_height(height);
+        encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
+        target_pix_fmt = ffmpeg::format::Pixel::YUV420P;
+        encoder_ctx_video.set_time_base(time_base);
+        encoder_ctx_video.set_frame_rate(Some(frame_rate));
+
+        let mut opts = ffmpeg::Dictionary::new();
+        opts.set("preset", "medium");
+        let opened = encoder_ctx_video.open_as_with(enc, opts)?;
+        (enc, opened)
+    };
+
+    let mut output_stream = output_ctx.add_stream(codec)?;
     output_stream.set_parameters(&encoder);
 
     output_ctx.write_header()?;
@@ -93,7 +133,7 @@ pub fn export_video(
         ffmpeg::format::Pixel::RGBA,
         width,
         height,
-        ffmpeg::format::Pixel::YUV420P,
+        target_pix_fmt,
         width,
         height,
         ffmpeg::software::scaling::flag::Flags::FAST_BILINEAR,
@@ -102,6 +142,7 @@ pub fn export_video(
     let mut decoded = ffmpeg::frame::Video::empty();
     let mut rgba_frame = ffmpeg::frame::Video::empty();
     let mut yuv_frame = ffmpeg::frame::Video::empty();
+    yuv_frame.set_format(target_pix_fmt);
 
     // Create telemetry view to handle bounding and laps cleanly
     let telemetry_view = crate::telemetry::TelemetryView::new(
