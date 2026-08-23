@@ -147,6 +147,14 @@ impl eframe::App for MyApp {
         if let Ok(res) = self.merge_rx.try_recv() {
             match res {
                 Ok(merged_path) => {
+                    // Try to delete the old video file if it was a previously merged temp file to save space
+                    let old_path_str = self.config.video_path.to_string_lossy();
+                    if old_path_str.contains("trackoverlay_merged_")
+                        && self.config.video_path.exists()
+                    {
+                        let _ = std::fs::remove_file(&self.config.video_path);
+                    }
+
                     self.config.video_path = merged_path.clone();
                     self.playhead_ms = 0;
                     self.last_seek_ms = -1;
