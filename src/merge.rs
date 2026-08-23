@@ -42,6 +42,10 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
     let output_path_buf = output_path.to_path_buf();
     output_path.keep()?;
 
+    // Execute FFmpeg
+    // For GoPro files, stream 0 is video, stream 1 is audio, stream 2 is timecode, stream 3 is GPMF telemetry.
+    // The concat demuxer can sometimes fail (Exit Code 234) if it encounters inconsistent data stream durations.
+    // Using `-copy_unknown` helps preserve streams like GPMF telemetry.
     let status = Command::new("ffmpeg")
         .arg("-y") // Overwrite output if exists
         .arg("-f")
@@ -53,7 +57,9 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
         .arg("-c")
         .arg("copy")
         .arg("-map")
-        .arg("0") // Map all streams (video, audio, data/telemetry)
+        .arg("0") // Map all streams
+        .arg("-copy_unknown") // Allow unknown streams (like GPMF) to be copied without failure
+        .arg("-ignore_unknown") // Ignore unknown stream failures
         .arg(&output_path_buf)
         .status()
         .context("Failed to run ffmpeg command for concatenation")?;
