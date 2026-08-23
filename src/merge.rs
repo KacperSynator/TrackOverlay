@@ -65,6 +65,10 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
         .arg("0:a") // Map audio streams
         .arg("-map")
         .arg("0:d") // Map data streams (preserves GPMF telemetry)
+        .arg("-map_metadata")
+        .arg("0") // Copy global metadata from the first file (preserves creation_time)
+        .arg("-movflags")
+        .arg("use_metadata_tags") // Write metadata tags into the MP4 container
         .arg("-copy_unknown") // Allow unknown streams (like GPMF) to be copied without failure
         .arg("-ignore_unknown") // Ignore unknown stream failures
         .arg(&output_path_buf)
