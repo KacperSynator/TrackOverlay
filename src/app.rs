@@ -15,6 +15,7 @@ use crate::video::VideoPlayer;
 pub enum DialogMode {
     None,
     PickVideo,
+    AppendVideo,
     PickTelemetry,
     PickExportOutput,
     PickConfigLoad,
@@ -35,6 +36,10 @@ pub struct MyApp {
     pub export_start_was_active: bool,
     pub export_end_was_active: bool,
 
+    pub merge_progress: Option<String>,
+    pub merge_rx: crossbeam_channel::Receiver<anyhow::Result<PathBuf>>,
+    pub merge_tx: crossbeam_channel::Sender<anyhow::Result<PathBuf>>,
+
     pub file_dialog: FileDialog,
     pub dialog_mode: DialogMode,
 
@@ -50,6 +55,7 @@ pub struct MyApp {
 impl MyApp {
     pub fn new(config: ProjectConfig, data_dir: Option<PathBuf>) -> Self {
         let (tx, rx) = crossbeam_channel::unbounded();
+        let (merge_tx, merge_rx) = crossbeam_channel::unbounded();
         let mut fd = FileDialog::new().default_size([600.0, 400.0]);
 
         if let Some(ref dir) = data_dir {
@@ -69,6 +75,9 @@ impl MyApp {
             export_tx: tx,
             export_start_was_active: false,
             export_end_was_active: false,
+            merge_progress: None,
+            merge_rx,
+            merge_tx,
             file_dialog: fd,
             dialog_mode: DialogMode::None,
             video_player: None,
@@ -134,6 +143,36 @@ impl MyApp {
 impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+
+        if let Ok(res) = self.merge_rx.try_recv() {
+            match res {
+                Ok(merged_path) => {
+                    self.config.video_path = merged_path.clone();
+                    self.playhead_ms = 0;
+                    self.last_seek_ms = -1;
+
+                    let repaint_ctx = ctx.clone();
+                    match VideoPlayer::new(&merged_path, move || repaint_ctx.request_repaint()) {
+                        Ok(mut player) => {
+                            if let Some(dur) = player.duration_ms() {
+                                self.video_duration_ms = dur;
+                            }
+                            self.video_player = Some(player);
+                            self.video_error = None;
+                            self.merge_progress = None;
+                        }
+                        Err(e) => {
+                            self.video_player = None;
+                            self.video_error = Some(format!("Failed to load merged video: {}", e));
+                            self.merge_progress = Some("Merge failed to load.".to_string());
+                        }
+                    }
+                }
+                Err(e) => {
+                    self.merge_progress = Some(format!("Merge failed: {}", e));
+                }
+            }
+        }
 
         if let Ok(res) = self.export_rx.try_recv() {
             self.active_export_progress = None;
