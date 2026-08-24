@@ -56,18 +56,22 @@ impl VideoPlayer {
                 "-select_streams",
                 "v:0",
                 "-show_entries",
-                "stream_tags=creation_time",
+                "format_tags=creation_time:stream_tags=creation_time",
                 "-of",
                 "default=noprint_wrappers=1:nokey=1",
                 &path_str,
             ])
             .output()
         {
-            let time_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !time_str.is_empty()
-                && let Ok(dt) = DateTime::parse_from_rfc3339(&time_str)
-            {
-                creation_time_utc = Some(dt.with_timezone(&Utc));
+            let stdout_str = String::from_utf8_lossy(&output.stdout);
+            for line in stdout_str.lines() {
+                let time_str = line.trim();
+                if !time_str.is_empty() {
+                    if let Ok(dt) = DateTime::parse_from_rfc3339(time_str) {
+                        creation_time_utc = Some(dt.with_timezone(&Utc));
+                        break;
+                    }
+                }
             }
         }
 

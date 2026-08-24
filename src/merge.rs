@@ -35,13 +35,17 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
         file.flush()?;
     }
 
+    // Create the tempfile but immediately close the file handle,
+    // saving only the path. This prevents file locking errors on Windows
+    // when ffmpeg tries to open and write to it.
     let output_file = tempfile::Builder::new()
         .prefix("trackoverlay_merged_")
         .suffix(".mp4")
         .tempfile()?;
 
-    // Keep the file handle alive while ffmpeg runs, but get the path
-    let output_path_buf = output_file.path().to_path_buf();
+    let output_path = output_file.into_temp_path();
+    let output_path_buf = output_path.to_path_buf();
+    output_path.keep()?;
 
     // Execute FFmpeg
     // GoPro MP4 files often contain obscure/unknown streams (like timecode or other metadata).
@@ -66,7 +70,11 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
         .arg("-map")
         .arg("0:d") // Map data streams (preserves GPMF telemetry)
         .arg("-map_metadata")
-        .arg("0") // Copy global metadata from the first file (preserves creation_time)
+        .arg("0") // Copy global metadata from the first file
+        .arg("-map_metadata:s:v")
+        .arg("0:s:v") // Copy video stream metadata (preserves creation_time on the stream)
+        .arg("-map_metadata:s:a")
+        .arg("0:s:a") // Copy audio stream metadata
         .arg("-movflags")
         .arg("use_metadata_tags") // Write metadata tags into the MP4 container
         .arg("-copy_unknown") // Allow unknown streams (like GPMF) to be copied without failure
@@ -79,12 +87,10 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
     let _ = std::fs::remove_file(concat_path_buf);
 
     if !status.success() {
-        // Output file is dropped and deleted automatically here since we didn't call keep()
+        // If it fails, try to cleanup output file
+        let _ = std::fs::remove_file(&output_path_buf);
         anyhow::bail!("ffmpeg concat failed with status: {}", status);
     }
 
-    // Now that it succeeded, persist the output file
-    let (_, output_path) = output_file.keep()?;
-
-    Ok(output_path)
+    Ok(output_path_buf)
 }
