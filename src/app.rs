@@ -147,6 +147,9 @@ impl eframe::App for MyApp {
         if let Ok(res) = self.merge_rx.try_recv() {
             match res {
                 Ok(merged_path) => {
+                    // Drop the old video player so it releases its file handle (especially on Windows)
+                    self.video_player = None;
+
                     // Try to delete the old video file if it was a previously merged temp file to save space
                     let old_path_str = self.config.video_path.to_string_lossy();
                     if old_path_str.contains("trackoverlay_merged_")
@@ -172,12 +175,13 @@ impl eframe::App for MyApp {
                         Err(e) => {
                             self.video_player = None;
                             self.video_error = Some(format!("Failed to load merged video: {}", e));
-                            self.merge_progress = Some("Merge failed to load.".to_string());
+                            self.merge_progress = None; // clear merge state to unlock UI
                         }
                     }
                 }
                 Err(e) => {
-                    self.merge_progress = Some(format!("Merge failed: {}", e));
+                    self.video_error = Some(format!("Merge failed: {}", e));
+                    self.merge_progress = None; // clear merge state to unlock UI
                 }
             }
         }
