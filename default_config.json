@@ -19,7 +19,12 @@
       "kind": "GForceMeter",
       "x": 0.5,
       "y": 0.85,
-      "scale": 1.0
+      "scale": 1.0,
+      "options": {
+        "invert_x": false,
+        "invert_y": false,
+        "swap_axes": false
+      }
     },
     {
       "enabled": true,

@@ -7,6 +7,51 @@ use tiny_skia::{Paint, PathBuilder, PixmapMut, Stroke, Transform};
 
 pub struct GForceMeter;
 
+impl GForceMeter {
+    fn extract_options(el: &OverlayElement) -> (bool, bool, bool) {
+        let mut invert_x = false;
+        let mut invert_y = false;
+        let mut swap_axes = false;
+
+        if let Some(opts) = &el.options {
+            if let Some(val) = opts.get("invert_x").and_then(|v| v.as_bool()) {
+                invert_x = val;
+            }
+            if let Some(val) = opts.get("invert_y").and_then(|v| v.as_bool()) {
+                invert_y = val;
+            }
+            if let Some(val) = opts.get("swap_axes").and_then(|v| v.as_bool()) {
+                swap_axes = val;
+            }
+        }
+        (invert_x, invert_y, swap_axes)
+    }
+
+    fn apply_axis_config(
+        dx: f32,
+        dy: f32,
+        invert_x: bool,
+        invert_y: bool,
+        swap_axes: bool,
+    ) -> (f32, f32) {
+        let mut final_dx = dx;
+        let mut final_dy = dy;
+
+        if swap_axes {
+            std::mem::swap(&mut final_dx, &mut final_dy);
+        }
+
+        if invert_x {
+            final_dx = -final_dx;
+        }
+        if invert_y {
+            final_dy = -final_dy;
+        }
+
+        (final_dx, final_dy)
+    }
+}
+
 impl OverlayImpl for GForceMeter {
     fn render_ui(
         &self,
@@ -29,7 +74,10 @@ impl OverlayImpl for GForceMeter {
             egui::Stroke::new(2.0 * el.scale, egui::Color32::WHITE),
         );
 
-        let (dx, dy) = common::get_gforce_dot(state.current_sample.as_ref(), radius);
+        let (invert_x, invert_y, swap_axes) = Self::extract_options(el);
+        let (raw_dx, raw_dy) = common::get_gforce_dot(state.current_sample.as_ref(), radius);
+        let (dx, dy) = Self::apply_axis_config(raw_dx, raw_dy, invert_x, invert_y, swap_axes);
+
         let dot_pos = center + egui::vec2(dx, dy);
         painter.circle_filled(dot_pos, 5.0 * el.scale, egui::Color32::RED);
     }
@@ -63,7 +111,10 @@ impl OverlayImpl for GForceMeter {
             pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
         }
 
-        let (dx, dy) = common::get_gforce_dot(state.current_sample.as_ref(), radius);
+        let (invert_x, invert_y, swap_axes) = Self::extract_options(el);
+        let (raw_dx, raw_dy) = common::get_gforce_dot(state.current_sample.as_ref(), radius);
+        let (dx, dy) = Self::apply_axis_config(raw_dx, raw_dy, invert_x, invert_y, swap_axes);
+
         let mut paint_red = Paint::default();
         paint_red.set_color_rgba8(255, 0, 0, 255);
         paint_red.anti_alias = true;
@@ -80,6 +131,33 @@ impl OverlayImpl for GForceMeter {
             );
         }
     }
+
+    fn custom_ui(&self, ui: &mut egui::Ui, el: &mut OverlayElement) {
+        let (mut invert_x, mut invert_y, mut swap_axes) = Self::extract_options(el);
+        let mut changed = false;
+
+        ui.horizontal(|ui| {
+            ui.label("  "); // Indent
+
+            if ui.checkbox(&mut swap_axes, "Swap X/Y").changed() {
+                changed = true;
+            }
+            if ui.checkbox(&mut invert_x, "Invert X").changed() {
+                changed = true;
+            }
+            if ui.checkbox(&mut invert_y, "Invert Y").changed() {
+                changed = true;
+            }
+        });
+
+        if changed {
+            let mut new_opts = serde_json::Map::new();
+            new_opts.insert("invert_x".to_string(), serde_json::Value::Bool(invert_x));
+            new_opts.insert("invert_y".to_string(), serde_json::Value::Bool(invert_y));
+            new_opts.insert("swap_axes".to_string(), serde_json::Value::Bool(swap_axes));
+            el.options = Some(serde_json::Value::Object(new_opts));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -88,13 +166,17 @@ mod tests {
     use eframe::egui;
 
     pub fn create_test_element() -> OverlayElement {
+        let mut opts = serde_json::Map::new();
+        opts.insert("invert_x".to_string(), serde_json::Value::Bool(false));
+        opts.insert("invert_y".to_string(), serde_json::Value::Bool(false));
+        opts.insert("swap_axes".to_string(), serde_json::Value::Bool(false));
         OverlayElement {
             enabled: true,
             kind: crate::project::OverlayKind::GForceMeter,
             x: 0.5,
             y: 0.5,
             scale: 1.0,
-            options: None,
+            options: Some(serde_json::Value::Object(opts)),
         }
     }
 
