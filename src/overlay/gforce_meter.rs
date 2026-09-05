@@ -151,7 +151,10 @@ impl OverlayImpl for GForceMeter {
         });
 
         if changed {
-            let mut new_opts = serde_json::Map::new();
+            let mut new_opts = match &el.options {
+                Some(serde_json::Value::Object(map)) => map.clone(),
+                _ => serde_json::Map::new(),
+            };
             new_opts.insert("invert_x".to_string(), serde_json::Value::Bool(invert_x));
             new_opts.insert("invert_y".to_string(), serde_json::Value::Bool(invert_y));
             new_opts.insert("swap_axes".to_string(), serde_json::Value::Bool(swap_axes));
@@ -230,6 +233,53 @@ mod tests {
             None,
             None,
         );
+    }
+
+    #[test]
+    fn test_extract_options() {
+        let mut el = create_test_element();
+        let (inv_x, inv_y, swap) = GForceMeter::extract_options(&el);
+        assert!(!inv_x);
+        assert!(!inv_y);
+        assert!(!swap);
+
+        let mut opts = serde_json::Map::new();
+        opts.insert("invert_x".to_string(), serde_json::Value::Bool(true));
+        opts.insert("swap_axes".to_string(), serde_json::Value::Bool(true));
+        el.options = Some(serde_json::Value::Object(opts));
+
+        let (inv_x, inv_y, swap) = GForceMeter::extract_options(&el);
+        assert!(inv_x);
+        assert!(!inv_y);
+        assert!(swap);
+    }
+
+    #[test]
+    fn test_apply_axis_config() {
+        // Base case
+        let (dx, dy) = GForceMeter::apply_axis_config(10.0, 5.0, false, false, false);
+        assert_eq!(dx, 10.0);
+        assert_eq!(dy, 5.0);
+
+        // Swap axes
+        let (dx, dy) = GForceMeter::apply_axis_config(10.0, 5.0, false, false, true);
+        assert_eq!(dx, 5.0);
+        assert_eq!(dy, 10.0);
+
+        // Invert X
+        let (dx, dy) = GForceMeter::apply_axis_config(10.0, 5.0, true, false, false);
+        assert_eq!(dx, -10.0);
+        assert_eq!(dy, 5.0);
+
+        // Invert Y
+        let (dx, dy) = GForceMeter::apply_axis_config(10.0, 5.0, false, true, false);
+        assert_eq!(dx, 10.0);
+        assert_eq!(dy, -5.0);
+
+        // Swap and Invert X (which was originally Y)
+        let (dx, dy) = GForceMeter::apply_axis_config(10.0, 5.0, true, false, true);
+        assert_eq!(dx, -5.0);
+        assert_eq!(dy, 10.0);
     }
 
     #[test]
