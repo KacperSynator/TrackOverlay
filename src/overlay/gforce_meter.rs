@@ -100,9 +100,11 @@ impl OverlayImpl for GForceMeter {
         let lon_g = state.current_sample.as_ref().map_or(0.0, |s| s.accel_lon_g);
         let combined_g = (lat_g * lat_g + lon_g * lon_g).sqrt();
 
+        let text_pos = center - egui::vec2(0.0, base_radius * 1.5 + 5.0 * el.scale);
+
         painter.text(
-            center,
-            egui::Align2::CENTER_CENTER,
+            text_pos,
+            egui::Align2::CENTER_BOTTOM,
             format!("{:.1} G", combined_g),
             egui::FontId::proportional(20.0 * el.scale),
             egui::Color32::WHITE,
@@ -202,21 +204,27 @@ impl OverlayImpl for GForceMeter {
         let combined_g = (lat_g * lat_g + lon_g * lon_g).sqrt();
         let text = format!("{:.1} G", combined_g);
 
+        // Position text above the outer circle (1.5x base radius) with some padding
+        // Center of the text is used, so we subtract half the estimated text height
+        let text_scale = 20.0 * el.scale * res_scale;
+        let padding = 5.0 * el.scale * res_scale;
+        let text_y = center_y - (base_radius * 1.5) - padding - (text_scale / 2.0);
+
         if let Some(font) = font_opt {
             common::draw_text(
                 pixmap,
                 font,
                 &text,
                 center_x,
-                center_y,
-                20.0 * el.scale * res_scale,
+                text_y,
+                text_scale,
                 tiny_skia::Color::WHITE,
             );
         } else {
             common::draw_text_fallback(
                 pixmap,
                 center_x,
-                center_y,
+                text_y,
                 40.0 * el.scale * res_scale,
                 15.0 * el.scale * res_scale,
                 tiny_skia::Color::WHITE,
