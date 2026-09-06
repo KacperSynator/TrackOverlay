@@ -67,19 +67,46 @@ impl OverlayImpl for GForceMeter {
             rect.top() + el.y * rect.height(),
         );
 
-        let radius = 40.0 * el.scale;
+        let base_radius = 40.0 * el.scale;
+
+        // 0.5G circle (inner)
         painter.circle_stroke(
             center,
-            radius,
-            egui::Stroke::new(2.0 * el.scale, egui::Color32::WHITE),
+            base_radius * 0.5,
+            egui::Stroke::new(1.0_f32 * el.scale, egui::Color32::from_white_alpha(128)),
+        );
+        // 1.0G circle (middle)
+        painter.circle_stroke(
+            center,
+            base_radius,
+            egui::Stroke::new(1.0_f32 * el.scale, egui::Color32::from_white_alpha(128)),
+        );
+        // 1.5G circle (outer)
+        painter.circle_stroke(
+            center,
+            base_radius * 1.5,
+            egui::Stroke::new(2.0_f32 * el.scale, egui::Color32::WHITE),
         );
 
         let (invert_x, invert_y, swap_axes) = Self::extract_options(el);
-        let (raw_dx, raw_dy) = common::get_gforce_dot(state.current_sample.as_ref(), radius);
+        let (raw_dx, raw_dy) = common::get_gforce_dot(state.current_sample.as_ref(), base_radius);
         let (dx, dy) = Self::apply_axis_config(raw_dx, raw_dy, invert_x, invert_y, swap_axes);
 
         let dot_pos = center + egui::vec2(dx, dy);
-        painter.circle_filled(dot_pos, 5.0 * el.scale, egui::Color32::RED);
+        painter.circle_filled(dot_pos, 5.0_f32 * el.scale, egui::Color32::RED);
+
+        // Render combined G value text
+        let lat_g = state.current_sample.as_ref().map_or(0.0, |s| s.accel_lat_g);
+        let lon_g = state.current_sample.as_ref().map_or(0.0, |s| s.accel_lon_g);
+        let combined_g = (lat_g * lat_g + lon_g * lon_g).sqrt();
+
+        painter.text(
+            center,
+            egui::Align2::CENTER_CENTER,
+            format!("{:.1} G", combined_g),
+            egui::FontId::proportional(20.0 * el.scale),
+            egui::Color32::WHITE,
+        );
     }
 
     fn render_skia(
@@ -88,7 +115,7 @@ impl OverlayImpl for GForceMeter {
         el: &OverlayElement,
         state: &TelemetryState,
         _trackmap: Option<&TrackMap>,
-        _font_opt: Option<&rusttype::Font>,
+        font_opt: Option<&rusttype::Font>,
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
@@ -96,23 +123,61 @@ impl OverlayImpl for GForceMeter {
         let center_x = el.x * width;
         let center_y = el.y * height;
 
-        let radius = 40.0 * el.scale * res_scale;
+        let base_radius = 40.0 * el.scale * res_scale;
 
-        let mut paint = Paint::default();
-        paint.set_color_rgba8(255, 255, 255, 255);
-        paint.anti_alias = true;
+        let mut paint_inner = Paint::default();
+        paint_inner.set_color_rgba8(255, 255, 255, 128);
+        paint_inner.anti_alias = true;
 
-        let stroke = Stroke {
+        let mut paint_outer = Paint::default();
+        paint_outer.set_color_rgba8(255, 255, 255, 255);
+        paint_outer.anti_alias = true;
+
+        let stroke_thin = Stroke {
+            width: 1.0 * el.scale * res_scale,
+            ..Default::default()
+        };
+
+        let stroke_thick = Stroke {
             width: 2.0 * el.scale * res_scale,
             ..Default::default()
         };
 
-        if let Some(path) = PathBuilder::from_circle(center_x, center_y, radius) {
-            pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+        // 0.5G circle (inner)
+        if let Some(path) = PathBuilder::from_circle(center_x, center_y, base_radius * 0.5) {
+            pixmap.stroke_path(
+                &path,
+                &paint_inner,
+                &stroke_thin,
+                Transform::identity(),
+                None,
+            );
+        }
+
+        // 1.0G circle (middle)
+        if let Some(path) = PathBuilder::from_circle(center_x, center_y, base_radius) {
+            pixmap.stroke_path(
+                &path,
+                &paint_inner,
+                &stroke_thin,
+                Transform::identity(),
+                None,
+            );
+        }
+
+        // 1.5G circle (outer)
+        if let Some(path) = PathBuilder::from_circle(center_x, center_y, base_radius * 1.5) {
+            pixmap.stroke_path(
+                &path,
+                &paint_outer,
+                &stroke_thick,
+                Transform::identity(),
+                None,
+            );
         }
 
         let (invert_x, invert_y, swap_axes) = Self::extract_options(el);
-        let (raw_dx, raw_dy) = common::get_gforce_dot(state.current_sample.as_ref(), radius);
+        let (raw_dx, raw_dy) = common::get_gforce_dot(state.current_sample.as_ref(), base_radius);
         let (dx, dy) = Self::apply_axis_config(raw_dx, raw_dy, invert_x, invert_y, swap_axes);
 
         let mut paint_red = Paint::default();
@@ -128,6 +193,33 @@ impl OverlayImpl for GForceMeter {
                 tiny_skia::FillRule::Winding,
                 Transform::identity(),
                 None,
+            );
+        }
+
+        // Render combined G value text
+        let lat_g = state.current_sample.as_ref().map_or(0.0, |s| s.accel_lat_g);
+        let lon_g = state.current_sample.as_ref().map_or(0.0, |s| s.accel_lon_g);
+        let combined_g = (lat_g * lat_g + lon_g * lon_g).sqrt();
+        let text = format!("{:.1} G", combined_g);
+
+        if let Some(font) = font_opt {
+            common::draw_text(
+                pixmap,
+                font,
+                &text,
+                center_x,
+                center_y,
+                20.0 * el.scale * res_scale,
+                tiny_skia::Color::WHITE,
+            );
+        } else {
+            common::draw_text_fallback(
+                pixmap,
+                center_x,
+                center_y,
+                40.0 * el.scale * res_scale,
+                15.0 * el.scale * res_scale,
+                tiny_skia::Color::WHITE,
             );
         }
     }
