@@ -3,7 +3,24 @@ use crate::project::OverlayElement;
 use crate::telemetry::TelemetryState;
 use crate::trackmap::TrackMap;
 use eframe::egui;
+use serde::{Deserialize, Serialize};
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThrottleBarConfig {
+    #[serde(default = "default_show_brake")]
+    pub show_brake: bool,
+}
+
+fn default_show_brake() -> bool {
+    true
+}
+
+impl Default for ThrottleBarConfig {
+    fn default() -> Self {
+        Self { show_brake: true }
+    }
+}
 
 pub struct ThrottleBar;
 
@@ -24,6 +41,12 @@ impl OverlayImpl for ThrottleBar {
 
         let throttle = common::get_throttle_ratio(state.current_sample.as_ref());
 
+        let config: ThrottleBarConfig = el
+            .options
+            .clone()
+            .map(|v| serde_json::from_value(v).unwrap_or_default())
+            .unwrap_or_default();
+
         let width = 20.0 * el.scale;
         let max_height = 100.0 * el.scale;
 
@@ -41,6 +64,29 @@ impl OverlayImpl for ThrottleBar {
         fill_rect.set_top(bg_rect.bottom() - fill_height);
 
         painter.rect_filled(fill_rect, 2.0, egui::Color32::GREEN);
+
+        if config.show_brake {
+            let brake_active = common::get_brake_active(state.current_sample.as_ref());
+            let brake_height = 15.0 * el.scale;
+            // Draw a small red box directly on top of the throttle bar
+            let mut brake_rect = bg_rect;
+            brake_rect.set_bottom(bg_rect.top());
+            brake_rect.set_top(brake_rect.bottom() - brake_height);
+            // Move it slightly up so it's disjoint or touching the top
+            brake_rect = brake_rect.translate(egui::vec2(0.0, -2.0 * el.scale));
+
+            painter.rect_filled(brake_rect, 2.0, egui::Color32::from_black_alpha(150));
+            painter.rect_stroke(
+                brake_rect,
+                2.0,
+                egui::Stroke::new(1.0_f32, egui::Color32::WHITE),
+                egui::StrokeKind::Inside,
+            );
+
+            if brake_active {
+                painter.rect_filled(brake_rect, 2.0, egui::Color32::RED);
+            }
+        }
     }
 
     fn render_skia(
@@ -56,6 +102,12 @@ impl OverlayImpl for ThrottleBar {
         let res_scale = height / 720.0;
         let center_x = el.x * width;
         let center_y = el.y * height;
+
+        let config: ThrottleBarConfig = el
+            .options
+            .clone()
+            .map(|v| serde_json::from_value(v).unwrap_or_default())
+            .unwrap_or_default();
 
         let throttle = common::get_throttle_ratio(state.current_sample.as_ref());
 
@@ -95,6 +147,60 @@ impl OverlayImpl for ThrottleBar {
             let mut paint_fill = Paint::default();
             paint_fill.set_color_rgba8(0, 255, 0, 255);
             pixmap.fill_rect(fill_rect, &paint_fill, Transform::identity(), None);
+        }
+
+        if config.show_brake {
+            let brake_active = common::get_brake_active(state.current_sample.as_ref());
+            let brake_h = 15.0 * el.scale * res_scale;
+            let brake_top = top - brake_h - (2.0 * el.scale * res_scale);
+            if let Some(brake_rect) = Rect::from_xywh(left, brake_top, w, brake_h) {
+                let mut paint_bg = Paint::default();
+                paint_bg.set_color_rgba8(0, 0, 0, 150);
+                pixmap.fill_rect(brake_rect, &paint_bg, Transform::identity(), None);
+
+                let mut pb = PathBuilder::new();
+                pb.move_to(left, brake_top);
+                pb.line_to(left + w, brake_top);
+                pb.line_to(left + w, brake_top + brake_h);
+                pb.line_to(left, brake_top + brake_h);
+                pb.close();
+                if let Some(path) = pb.finish() {
+                    let mut paint_stroke = Paint::default();
+                    paint_stroke.set_color_rgba8(255, 255, 255, 255);
+                    let stroke = Stroke {
+                        width: 1.0_f32,
+                        ..Default::default()
+                    };
+                    pixmap.stroke_path(&path, &paint_stroke, &stroke, Transform::identity(), None);
+                }
+
+                if brake_active {
+                    let mut paint_fill = Paint::default();
+                    paint_fill.set_color_rgba8(255, 0, 0, 255);
+                    pixmap.fill_rect(brake_rect, &paint_fill, Transform::identity(), None);
+                }
+            }
+        }
+    }
+
+    fn custom_ui(&self, ui: &mut egui::Ui, el: &mut OverlayElement) {
+        let mut config: ThrottleBarConfig = el
+            .options
+            .clone()
+            .map(|v| serde_json::from_value(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let mut changed = false;
+
+        ui.horizontal(|ui| {
+            ui.label("Show Brake Indicator:");
+            if ui.checkbox(&mut config.show_brake, "").changed() {
+                changed = true;
+            }
+        });
+
+        if changed {
+            el.options = Some(serde_json::to_value(config).unwrap());
         }
     }
 }

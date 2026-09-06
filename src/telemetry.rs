@@ -28,6 +28,9 @@ pub struct RawTelemetryRow {
     #[serde(rename = "Throttle Position (%) *OBD", default)]
     pub throttle_position: f32,
 
+    #[serde(rename = "Brake (calculated)", default)]
+    pub brake: f32,
+
     #[serde(rename = "Engine Speed (RPM) *OBD", default)]
     pub engine_speed_rpm: f32,
 
@@ -52,6 +55,7 @@ pub struct TelemetrySample {
     pub lap_number: Option<u32>,
     pub lap_time_ms: Option<i64>,
     pub throttle_pct: f32,
+    pub brake: f32,
     pub engine_speed_rpm: f32,
 
     pub session_distance_m: f64,
@@ -174,6 +178,7 @@ impl TelemetryLog {
                 lap_number: Some(row.lap),
                 lap_time_ms: Some(lap_time_ms),
                 throttle_pct: row.throttle_position,
+                brake: row.brake,
                 engine_speed_rpm: row.engine_speed_rpm,
                 session_distance_m,
                 lap_distance_m,
@@ -238,6 +243,7 @@ impl TelemetryLog {
                             l1 + ((l2 - l1) as f32 * t) as i64
                         }),
                         throttle_pct: s1.throttle_pct + (s2.throttle_pct - s1.throttle_pct) * t,
+                        brake: s1.brake + (s2.brake - s1.brake) * t,
                         engine_speed_rpm: s1.engine_speed_rpm
                             + (s2.engine_speed_rpm - s1.engine_speed_rpm) * t,
                         session_distance_m: s1.session_distance_m
@@ -373,6 +379,7 @@ impl<'a> TelemetryView<'a> {
                             l1 + ((l2 - l1) as f32 * t) as i64
                         }),
                         throttle_pct: s1.throttle_pct + (s2.throttle_pct - s1.throttle_pct) * t,
+                        brake: s1.brake + (s2.brake - s1.brake) * t,
                         engine_speed_rpm: s1.engine_speed_rpm
                             + (s2.engine_speed_rpm - s1.engine_speed_rpm) * t,
                         session_distance_m: s1.session_distance_m

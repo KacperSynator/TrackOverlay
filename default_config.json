@@ -52,7 +52,10 @@
       "kind": "ThrottleBar",
       "x": 0.2,
       "y": 0.85,
-      "scale": 1.0
+      "scale": 1.0,
+      "options": {
+        "show_brake": true
+      }
     },
     {
       "enabled": true,
