@@ -17,6 +17,8 @@ pub enum DialogMode {
     PickVideo,
     PickTelemetry,
     PickExportOutput,
+    PickConfigLoad,
+    PickConfigSave,
 }
 
 pub struct MyApp {

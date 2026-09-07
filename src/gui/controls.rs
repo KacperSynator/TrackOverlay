@@ -86,6 +86,17 @@ fn render_project_files_section(app: &mut MyApp, ui: &mut egui::Ui) {
     render_load_video(app, ui);
     ui.add_space(10.0);
     render_load_telemetry(app, ui);
+    ui.add_space(10.0);
+    ui.horizontal(|ui| {
+        if ui.button("Load Config").clicked() {
+            app.dialog_mode = DialogMode::PickConfigLoad;
+            app.file_dialog.pick_file();
+        }
+        if ui.button("Save Config").clicked() {
+            app.dialog_mode = DialogMode::PickConfigSave;
+            app.file_dialog.save_file();
+        }
+    });
 }
 
 fn render_settings_section(app: &mut MyApp, ui: &mut egui::Ui) {
