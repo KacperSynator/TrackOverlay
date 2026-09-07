@@ -286,6 +286,7 @@ mod tests {
             lat: 10.0,
             lon: 20.0,
             accel_lat_g: 1.5,
+            brake: 0.0,
             accel_lon_g: -0.5,
             lap_number: Some(2),
             lap_time_ms: Some(150500),

@@ -25,6 +25,10 @@ pub fn get_throttle_ratio(sample: Option<&TelemetrySample>) -> f32 {
     sample.map_or(0.0, |s| s.throttle_pct).clamp(0.0, 100.0) / 100.0
 }
 
+pub fn get_brake_active(sample: Option<&TelemetrySample>) -> bool {
+    sample.is_some_and(|s| s.brake > 0.5)
+}
+
 pub fn draw_text_fallback(
     pixmap: &mut PixmapMut,
     center_x: f32,
@@ -138,6 +142,7 @@ pub fn create_test_sample() -> TelemetrySample {
         lap_number: Some(2),
         lap_time_ms: Some(150500),
         throttle_pct: 75.0,
+        brake: 0.0,
         engine_speed_rpm: 6200.0,
         session_distance_m: 1000.0,
         lap_distance_m: 500.0,
@@ -189,6 +194,15 @@ mod tests {
 
         clamped_sample.throttle_pct = -50.0;
         assert_eq!(get_throttle_ratio(Some(&clamped_sample)), 0.0);
+    }
+
+    #[test]
+    fn test_get_brake_active() {
+        assert!(!get_brake_active(None));
+        let mut sample = create_test_sample();
+        assert!(!get_brake_active(Some(&sample)));
+        sample.brake = 1.0;
+        assert!(get_brake_active(Some(&sample)));
     }
 
     #[test]
