@@ -48,28 +48,38 @@ impl VideoPlayer {
         ffmpeg::init()?;
         let path_str = path.as_ref().to_string_lossy().to_string();
 
-        let mut creation_time_utc = None;
-        if let Ok(output) = Command::new("ffprobe")
-            .args([
-                "-v",
-                "quiet",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream_tags=creation_time",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                &path_str,
-            ])
-            .output()
-        {
-            let time_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !time_str.is_empty()
-                && let Ok(dt) = DateTime::parse_from_rfc3339(&time_str)
+        // Helper function to run ffprobe and parse the date
+        let fetch_time = |entries: &str| -> Option<DateTime<Utc>> {
+            if let Ok(output) = Command::new("ffprobe")
+                .args([
+                    "-v",
+                    "quiet",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    entries,
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    &path_str,
+                ])
+                .output()
             {
-                creation_time_utc = Some(dt.with_timezone(&Utc));
+                let stdout_str = String::from_utf8_lossy(&output.stdout);
+                for line in stdout_str.lines() {
+                    let time_str = line.trim();
+                    if !time_str.is_empty()
+                        && let Ok(dt) = DateTime::parse_from_rfc3339(time_str)
+                    {
+                        return Some(dt.with_timezone(&Utc));
+                    }
+                }
             }
-        }
+            None
+        };
+
+        // First try the video stream tags, then fallback to the global format tags
+        let creation_time_utc = fetch_time("stream_tags=creation_time")
+            .or_else(|| fetch_time("format_tags=creation_time"));
 
         let input_ctx = ffmpeg::format::input(&path_str)?;
         let stream = input_ctx

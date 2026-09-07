@@ -10,11 +10,25 @@ use crate::sync::auto_correlate_gps;
 use crate::telemetry::TelemetryLog;
 
 fn render_load_video(app: &mut MyApp, ui: &mut egui::Ui) {
+    let is_merging = app.merge_progress.is_some();
+
     ui.horizontal(|ui| {
-        if ui.button("Load Video").clicked() {
-            app.dialog_mode = DialogMode::PickVideo;
-            app.file_dialog.pick_file();
-        }
+        ui.add_enabled_ui(!is_merging, |ui| {
+            if ui.button("Load Video").clicked() {
+                app.dialog_mode = DialogMode::PickVideo;
+                app.file_dialog.pick_file();
+            }
+
+            let has_video = app.config.video_path.exists() && app.config.video_path.is_file();
+
+            ui.add_enabled_ui(has_video, |ui| {
+                if ui.button("Append Video").clicked() {
+                    app.dialog_mode = DialogMode::AppendVideo;
+                    app.file_dialog.pick_file();
+                }
+            });
+        });
+
         ui.label(
             app.config
                 .video_path
@@ -32,6 +46,10 @@ fn render_load_video(app: &mut MyApp, ui: &mut egui::Ui) {
             ));
         }
         ui.label(format!("  Duration: {}s", app.video_duration_ms / 1000));
+    }
+
+    if let Some(msg) = &app.merge_progress {
+        ui.label(msg);
     }
 }
 

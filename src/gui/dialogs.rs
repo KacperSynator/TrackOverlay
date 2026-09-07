@@ -66,6 +66,21 @@ fn handle_pick_config_save(app: &mut MyApp, path_buf: PathBuf) {
     }
 }
 
+fn handle_pick_append_video(app: &mut MyApp, ctx: &egui::Context, path_buf: PathBuf) {
+    app.merge_progress = Some("Merging videos...".to_string());
+
+    let original_video = app.config.video_path.clone();
+    let new_video = path_buf;
+    let tx = app.merge_tx.clone();
+    let repaint_ctx = ctx.clone();
+
+    std::thread::spawn(move || {
+        let result = crate::merge::merge_videos(&original_video, &new_video);
+        let _ = tx.send(result);
+        repaint_ctx.request_repaint();
+    });
+}
+
 fn handle_pick_export_output(app: &mut MyApp, path_buf: PathBuf) {
     let config_clone = app.config.clone();
     let telem_clone = if let Some(t) = &app.telemetry {
@@ -109,6 +124,7 @@ pub fn handle_dialogs(app: &mut MyApp, ctx: &egui::Context) {
         let path_buf = path.to_path_buf();
         match app.dialog_mode {
             DialogMode::PickVideo => handle_pick_video(app, ctx, path_buf),
+            DialogMode::AppendVideo => handle_pick_append_video(app, ctx, path_buf),
             DialogMode::PickTelemetry => handle_pick_telemetry(app, path_buf),
             DialogMode::PickExportOutput => handle_pick_export_output(app, path_buf),
             DialogMode::PickConfigLoad => handle_pick_config_load(app, ctx, path_buf),
