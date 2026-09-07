@@ -22,6 +22,69 @@ impl Default for ThrottleBarConfig {
     }
 }
 
+fn draw_brake_ui(painter: egui::Painter, bg_rect: egui::Rect, scale: f32, state: &TelemetryState) {
+    let brake_active = common::get_brake_active(state.current_sample.as_ref());
+    let brake_height = 15.0 * scale;
+    // Draw a small red box directly on top of the throttle bar
+    let mut brake_rect = bg_rect;
+    brake_rect.set_bottom(bg_rect.top());
+    brake_rect.set_top(brake_rect.bottom() - brake_height);
+    // Move it slightly up so it's disjoint or touching the top
+    brake_rect = brake_rect.translate(egui::vec2(0.0, -2.0 * scale));
+
+    painter.rect_filled(brake_rect, 2.0, egui::Color32::from_black_alpha(150));
+    painter.rect_stroke(
+        brake_rect,
+        2.0,
+        egui::Stroke::new(1.0_f32, egui::Color32::WHITE),
+        egui::StrokeKind::Inside,
+    );
+
+    if brake_active {
+        painter.rect_filled(brake_rect, 2.0, egui::Color32::RED);
+    }
+}
+
+fn draw_brake_skia(
+    pixmap: &mut PixmapMut,
+    left: f32,
+    top: f32,
+    w: f32,
+    scale: f32,
+    state: &TelemetryState,
+) {
+    let brake_active = common::get_brake_active(state.current_sample.as_ref());
+    let brake_h = 15.0 * scale;
+    let brake_top = top - brake_h - (2.0 * scale);
+    if let Some(brake_rect) = Rect::from_xywh(left, brake_top, w, brake_h) {
+        let mut paint_bg = Paint::default();
+        paint_bg.set_color_rgba8(0, 0, 0, 150);
+        pixmap.fill_rect(brake_rect, &paint_bg, Transform::identity(), None);
+
+        let mut pb = PathBuilder::new();
+        pb.move_to(left, brake_top);
+        pb.line_to(left + w, brake_top);
+        pb.line_to(left + w, brake_top + brake_h);
+        pb.line_to(left, brake_top + brake_h);
+        pb.close();
+        if let Some(path) = pb.finish() {
+            let mut paint_stroke = Paint::default();
+            paint_stroke.set_color_rgba8(255, 255, 255, 255);
+            let stroke = Stroke {
+                width: 1.0_f32,
+                ..Default::default()
+            };
+            pixmap.stroke_path(&path, &paint_stroke, &stroke, Transform::identity(), None);
+        }
+
+        if brake_active {
+            let mut paint_fill = Paint::default();
+            paint_fill.set_color_rgba8(255, 0, 0, 255);
+            pixmap.fill_rect(brake_rect, &paint_fill, Transform::identity(), None);
+        }
+    }
+}
+
 pub struct ThrottleBar;
 
 impl OverlayImpl for ThrottleBar {
@@ -66,26 +129,7 @@ impl OverlayImpl for ThrottleBar {
         painter.rect_filled(fill_rect, 2.0, egui::Color32::GREEN);
 
         if config.show_brake {
-            let brake_active = common::get_brake_active(state.current_sample.as_ref());
-            let brake_height = 15.0 * el.scale;
-            // Draw a small red box directly on top of the throttle bar
-            let mut brake_rect = bg_rect;
-            brake_rect.set_bottom(bg_rect.top());
-            brake_rect.set_top(brake_rect.bottom() - brake_height);
-            // Move it slightly up so it's disjoint or touching the top
-            brake_rect = brake_rect.translate(egui::vec2(0.0, -2.0 * el.scale));
-
-            painter.rect_filled(brake_rect, 2.0, egui::Color32::from_black_alpha(150));
-            painter.rect_stroke(
-                brake_rect,
-                2.0,
-                egui::Stroke::new(1.0_f32, egui::Color32::WHITE),
-                egui::StrokeKind::Inside,
-            );
-
-            if brake_active {
-                painter.rect_filled(brake_rect, 2.0, egui::Color32::RED);
-            }
+            draw_brake_ui(painter, bg_rect, el.scale, state);
         }
     }
 
@@ -150,38 +194,10 @@ impl OverlayImpl for ThrottleBar {
         }
 
         if config.show_brake {
-            let brake_active = common::get_brake_active(state.current_sample.as_ref());
-            let brake_h = 15.0 * el.scale * res_scale;
-            let brake_top = top - brake_h - (2.0 * el.scale * res_scale);
-            if let Some(brake_rect) = Rect::from_xywh(left, brake_top, w, brake_h) {
-                let mut paint_bg = Paint::default();
-                paint_bg.set_color_rgba8(0, 0, 0, 150);
-                pixmap.fill_rect(brake_rect, &paint_bg, Transform::identity(), None);
-
-                let mut pb = PathBuilder::new();
-                pb.move_to(left, brake_top);
-                pb.line_to(left + w, brake_top);
-                pb.line_to(left + w, brake_top + brake_h);
-                pb.line_to(left, brake_top + brake_h);
-                pb.close();
-                if let Some(path) = pb.finish() {
-                    let mut paint_stroke = Paint::default();
-                    paint_stroke.set_color_rgba8(255, 255, 255, 255);
-                    let stroke = Stroke {
-                        width: 1.0_f32,
-                        ..Default::default()
-                    };
-                    pixmap.stroke_path(&path, &paint_stroke, &stroke, Transform::identity(), None);
-                }
-
-                if brake_active {
-                    let mut paint_fill = Paint::default();
-                    paint_fill.set_color_rgba8(255, 0, 0, 255);
-                    pixmap.fill_rect(brake_rect, &paint_fill, Transform::identity(), None);
-                }
-            }
+            draw_brake_skia(pixmap, left, top, w, el.scale * res_scale, state);
         }
     }
+
 
     fn custom_ui(&self, ui: &mut egui::Ui, el: &mut OverlayElement) {
         let mut config: ThrottleBarConfig = el
