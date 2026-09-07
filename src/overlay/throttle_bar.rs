@@ -22,7 +22,7 @@ impl Default for ThrottleBarConfig {
     }
 }
 
-fn draw_brake_ui(painter: egui::Painter, bg_rect: egui::Rect, scale: f32, state: &TelemetryState) {
+fn draw_brake_ui(painter: &egui::Painter, bg_rect: egui::Rect, scale: f32, state: &TelemetryState) {
     let brake_active = common::get_brake_active(state.current_sample.as_ref());
     let brake_height = 15.0 * scale;
     // Draw a small red box directly on top of the throttle bar
@@ -129,7 +129,7 @@ impl OverlayImpl for ThrottleBar {
         painter.rect_filled(fill_rect, 2.0, egui::Color32::GREEN);
 
         if config.show_brake {
-            draw_brake_ui(painter, bg_rect, el.scale, state);
+            draw_brake_ui(&painter, bg_rect, el.scale, state);
         }
     }
 
@@ -197,7 +197,6 @@ impl OverlayImpl for ThrottleBar {
             draw_brake_skia(pixmap, left, top, w, el.scale * res_scale, state);
         }
     }
-
 
     fn custom_ui(&self, ui: &mut egui::Ui, el: &mut OverlayElement) {
         let mut config: ThrottleBarConfig = el
