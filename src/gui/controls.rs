@@ -92,6 +92,10 @@ fn render_settings_section(app: &mut MyApp, ui: &mut egui::Ui) {
     ui.heading("Settings");
     ui.checkbox(&mut app.config.flip_vertical, "Flip Video Vertically");
     ui.checkbox(&mut app.config.flip_horizontal, "Flip Video Horizontally");
+    ui.checkbox(
+        &mut app.config.use_hardware_acceleration,
+        "Use Hardware Acceleration (if available)",
+    );
 
     let mut speed_source = app.config.speed_source.clone();
     let mut changed = false;
