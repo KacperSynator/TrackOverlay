@@ -4,6 +4,20 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+fn get_metadata_value(video: &Path, key: &str) -> Result<Option<String>> {
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("quiet")
+        .arg("-show_entries")
+        .arg(format!("format_tags={}", key))
+        .arg("-of")
+        .arg("default=noprint_wrappers=1:nokey=1")
+        .arg(video)
+        .output()?;
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(if value.is_empty() { None } else { Some(value) })
+}
+
 pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
     let concat_file = tempfile::Builder::new()
         .prefix("trackoverlay_concat_")
@@ -47,14 +61,19 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
     let output_path_buf = output_path.to_path_buf();
     output_path.keep()?;
 
+    // Fetch critical metadata tags from the first video to inject manually.
+    // The concat demuxer does not carry over global or stream tags to the virtual container.
+    let creation_time = get_metadata_value(video1, "creation_time").unwrap_or(None);
+    let firmware = get_metadata_value(video1, "firmware").unwrap_or(None);
+
     // Execute FFmpeg
     // GoPro MP4 files often contain obscure/unknown streams (like timecode or other metadata).
     // Using a generic `-map 0` forces FFmpeg to copy these unknown streams into the new MP4,
     // which causes the MP4 muxer to fail with "Could not find tag for codec none in stream...".
     // To safely preserve GPMF telemetry and skip the broken ones, we explicitly map Video (v),
     // Audio (a), and Data (d).
-    let status = Command::new("ffmpeg")
-        .arg("-y") // Overwrite output if exists
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y") // Overwrite output if exists
         .arg("-f")
         .arg("concat")
         .arg("-safe")
@@ -69,16 +88,19 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
         .arg("0:a") // Map audio streams
         .arg("-map")
         .arg("0:d") // Map data streams (preserves GPMF telemetry)
-        .arg("-map_metadata")
-        .arg("0") // Copy global metadata from the first file
-        .arg("-map_metadata:s:v")
-        .arg("0:s:v") // Copy video stream metadata (preserves creation_time on the stream)
-        .arg("-map_metadata:s:a")
-        .arg("0:s:a") // Copy audio stream metadata
         .arg("-movflags")
         .arg("use_metadata_tags") // Write metadata tags into the MP4 container
         .arg("-copy_unknown") // Allow unknown streams (like GPMF) to be copied without failure
-        .arg("-ignore_unknown") // Ignore unknown stream failures
+        .arg("-ignore_unknown"); // Ignore unknown stream failures
+
+    if let Some(ct) = creation_time {
+        cmd.arg("-metadata").arg(format!("creation_time={}", ct));
+    }
+    if let Some(fw) = firmware {
+        cmd.arg("-metadata").arg(format!("firmware={}", fw));
+    }
+
+    let status = cmd
         .arg(&output_path_buf)
         .status()
         .context("Failed to run ffmpeg command for concatenation")?;
