@@ -62,11 +62,13 @@ impl MyApp {
             fd = fd.initial_directory(dir.clone());
         }
 
+        let initial_playhead = config.export_start_ms.unwrap_or(0);
+
         Self {
             config,
             telemetry: None,
             trackmap: None,
-            playhead_ms: 0,
+            playhead_ms: initial_playhead,
             is_playing: false,
             auto_sync_progress: None,
             export_progress: None,
@@ -159,7 +161,7 @@ impl eframe::App for MyApp {
                     }
 
                     self.config.video_path = merged_path.clone();
-                    self.playhead_ms = 0;
+                    self.playhead_ms = self.config.export_start_ms.unwrap_or(0);
                     self.last_seek_ms = -1;
 
                     let repaint_ctx = ctx.clone();

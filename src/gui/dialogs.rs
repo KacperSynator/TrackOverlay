@@ -9,7 +9,7 @@ use crate::video::VideoPlayer;
 
 fn handle_pick_video(app: &mut MyApp, ctx: &egui::Context, path_buf: PathBuf) {
     app.config.video_path = path_buf.clone();
-    app.playhead_ms = 0;
+    app.playhead_ms = app.config.export_start_ms.unwrap_or(0);
     app.last_seek_ms = -1;
 
     let repaint_ctx = ctx.clone();
