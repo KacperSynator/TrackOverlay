@@ -329,7 +329,9 @@ impl RpmOverlay {
             }
         }
 
-        let bg_rect = Rect::from_xywh(left, top, max_w, h).unwrap();
+        let Some(bg_rect) = Rect::from_xywh(left, top, max_w, h) else {
+            return;
+        };
 
         let mut paint_bg = Paint::default();
         paint_bg.set_color_rgba8(0, 0, 0, 150);
