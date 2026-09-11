@@ -12,6 +12,7 @@ fn get_metadata_value(video: &Path, key: &str) -> Result<Option<String>> {
         .arg(format!("format_tags={}", key))
         .arg("-of")
         .arg("default=noprint_wrappers=1:nokey=1")
+        .arg("-i")
         .arg(video)
         .output()?;
     let value = String::from_utf8_lossy(&output.stdout).trim().to_string();

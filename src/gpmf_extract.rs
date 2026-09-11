@@ -16,6 +16,7 @@ pub fn extract_gopro_gps(video_path: &str) -> Result<Vec<(i64, f64, f64)>> {
             "stream=index,codec_tag_string",
             "-of",
             "csv=p=0",
+            "-i",
             video_path,
         ])
         .output()?;
