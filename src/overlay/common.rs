@@ -208,7 +208,8 @@ mod tests {
     #[test]
     fn test_draw_text_fallback() {
         let mut data = vec![0; 100 * 100 * 4];
-        let mut pixmap = PixmapMut::from_bytes(&mut data, 100, 100).unwrap();
+        let mut pixmap = PixmapMut::from_bytes(&mut data, 100, 100)
+            .expect("Failed to create PixmapMut from bytes");
         draw_text_fallback(
             &mut pixmap,
             50.0,
@@ -223,10 +224,12 @@ mod tests {
     #[test]
     fn test_draw_text() {
         let font_data = include_bytes!("../font.ttf");
-        let font = Font::try_from_bytes(font_data as &[u8]).unwrap();
+        let font =
+            Font::try_from_bytes(font_data as &[u8]).expect("Failed to load font from bytes");
 
         let mut data = vec![0; 100 * 100 * 4];
-        let mut pixmap = PixmapMut::from_bytes(&mut data, 100, 100).unwrap();
+        let mut pixmap = PixmapMut::from_bytes(&mut data, 100, 100)
+            .expect("Failed to create PixmapMut from bytes");
 
         draw_text(
             &mut pixmap,
