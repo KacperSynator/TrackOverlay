@@ -60,6 +60,7 @@ impl VideoPlayer {
                     entries,
                     "-of",
                     "default=noprint_wrappers=1:nokey=1",
+                    "-i",
                     &path_str,
                 ])
                 .output()
