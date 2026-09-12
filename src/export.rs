@@ -79,6 +79,11 @@ pub fn export_video(
 
     output_ctx.write_header()?;
 
+    let output_time_base = output_ctx
+        .stream(0)
+        .ok_or_else(|| anyhow!("Output stream not found"))?
+        .time_base();
+
     let mut scaler_to_rgba = ffmpeg::software::scaling::Context::get(
         decoder.format(),
         width,
@@ -290,7 +295,7 @@ pub fn export_video(
                 let mut encoded = ffmpeg::Packet::empty();
                 while encoder.receive_packet(&mut encoded).is_ok() {
                     encoded.set_stream(0);
-                    encoded.rescale_ts(time_base, output_ctx.stream(0).unwrap().time_base());
+                    encoded.rescale_ts(time_base, output_time_base);
                     encoded.write_interleaved(&mut output_ctx)?;
                 }
             }
@@ -354,7 +359,7 @@ pub fn export_video(
         let mut encoded = ffmpeg::Packet::empty();
         while encoder.receive_packet(&mut encoded).is_ok() {
             encoded.set_stream(0);
-            encoded.rescale_ts(time_base, output_ctx.stream(0).unwrap().time_base());
+            encoded.rescale_ts(time_base, output_time_base);
             encoded.write_interleaved(&mut output_ctx)?;
         }
     }
@@ -363,7 +368,7 @@ pub fn export_video(
     let mut encoded = ffmpeg::Packet::empty();
     while encoder.receive_packet(&mut encoded).is_ok() {
         encoded.set_stream(0);
-        encoded.rescale_ts(time_base, output_ctx.stream(0).unwrap().time_base());
+        encoded.rescale_ts(time_base, output_time_base);
         encoded.write_interleaved(&mut output_ctx)?;
     }
 
