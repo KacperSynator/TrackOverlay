@@ -1,16 +1,13 @@
 FROM rust:1.85-bookworm AS builder
 
-# Install necessary dependencies for GStreamer and egui
+# Install necessary dependencies for FFmpeg and egui
 RUN apt-get update && apt-get install -y \
-    libglib2.0-dev \
-    libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev \
-    libgstreamer-plugins-bad1.0-dev \
-    gstreamer1.0-plugins-base \
-    gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad \
-    gstreamer1.0-plugins-ugly \
-    gstreamer1.0-libav \
+    libavutil-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libswscale-dev \
+    libavdevice-dev \
+    libavfilter-dev \
     ffmpeg \
     pkg-config \
     libx11-dev \
@@ -38,13 +35,6 @@ FROM debian:bookworm-slim
 
 # Install runtime dependencies including VA-API drivers for Radeon/Intel hardware acceleration
 RUN apt-get update && apt-get install -y \
-    libglib2.0-0 \
-    gstreamer1.0-plugins-base \
-    gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad \
-    gstreamer1.0-plugins-ugly \
-    gstreamer1.0-libav \
-    gstreamer1.0-vaapi \
     ffmpeg \
     libx11-6 \
     libxcursor1 \
