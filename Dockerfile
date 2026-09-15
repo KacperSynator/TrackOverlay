@@ -33,7 +33,7 @@ RUN cargo build --release
 # Final lightweight image
 FROM debian:bookworm-slim
 
-# Install runtime dependencies including VA-API drivers for Radeon/Intel hardware acceleration
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libx11-6 \
@@ -47,11 +47,6 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     libegl1 \
     libfontconfig1 \
-    mesa-va-drivers \
-    libva-drm2 \
-    libva-x11-2 \
-    libva-wayland2 \
-    vainfo \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
