@@ -83,12 +83,24 @@ Because the app is graphical and needs file access, you must map your display se
 
 #### 1. Basic GUI Mode
 
+**For X11:**
 ```bash
 xhost +local:docker
 docker run --rm \
   -e DISPLAY=$DISPLAY \
   -e RUST_LOG=info \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v $(pwd)/data:/app/data \
+  track-overlay --config /app/data/default_config.json --data-dir /app/data
+```
+
+**For Wayland (e.g., Cachy OS default):**
+```bash
+docker run --rm \
+  -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
+  -e XDG_RUNTIME_DIR=/tmp \
+  -e RUST_LOG=info \
+  -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
   -v $(pwd)/data:/app/data \
   track-overlay --config /app/data/default_config.json --data-dir /app/data
 ```
