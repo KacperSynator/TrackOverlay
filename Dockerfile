@@ -1,7 +1,8 @@
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.98-bookworm AS builder
 
 # Install necessary dependencies for FFmpeg and egui
 RUN apt-get update && apt-get install -y \
+    clang \
     libavutil-dev \
     libavformat-dev \
     libavcodec-dev \
