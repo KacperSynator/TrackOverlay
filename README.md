@@ -105,6 +105,8 @@ docker run --rm \
 docker run --rm \
   -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
   -e XDG_RUNTIME_DIR=/tmp \
+  -e XDG_SESSION_TYPE=wayland \
+  -e WINIT_UNIX_BACKEND=wayland \
   -e RUST_LOG=info \
   -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
   -v $(pwd)/data:/app/data \
@@ -120,6 +122,8 @@ When running with the GPU-accelerated image, you must pass your host's GPU devic
 docker run --rm \
   -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
   -e XDG_RUNTIME_DIR=/tmp \
+  -e XDG_SESSION_TYPE=wayland \
+  -e WINIT_UNIX_BACKEND=wayland \
   -e RUST_LOG=info \
   -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
   -v $(pwd)/data:/app/data \
@@ -132,6 +136,8 @@ docker run --rm \
 docker run --rm \
   -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
   -e XDG_RUNTIME_DIR=/tmp \
+  -e XDG_SESSION_TYPE=wayland \
+  -e WINIT_UNIX_BACKEND=wayland \
   -e RUST_LOG=info \
   -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
   -v $(pwd)/data:/app/data \

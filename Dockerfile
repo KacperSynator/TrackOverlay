@@ -61,8 +61,14 @@ ENTRYPOINT ["track-overlay"]
 # Final lightweight image (GPU support)
 FROM cpu AS gpu
 
+# Add bookworm-backports for newer Mesa drivers to support modern AMD/Intel GPUs
+RUN echo "deb http://deb.debian.org/debian bookworm-backports main" > /etc/apt/sources.list.d/backports.list
+
 # Install GPU drivers and wayland clipboard utilities
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y -t bookworm-backports \
     mesa-vulkan-drivers \
+    libegl-mesa0 \
+    libgl1-mesa-dri \
+    && apt-get install -y \
     wl-clipboard \
     && rm -rf /var/lib/apt/lists/*
