@@ -71,17 +71,23 @@ If you don't want to install dependencies locally, you can build and run `track-
 
 ### Building the Docker Image
 
-From the project root:
+You can build the Docker image with CPU-only support or with GPU hardware acceleration support.
 
+**Build CPU-only image:**
 ```bash
-docker build -t track-overlay .
+docker build --target cpu -t track-overlay:cpu .
+```
+
+**Build GPU-accelerated image (Recommended for better performance):**
+```bash
+docker build --target gpu -t track-overlay:gpu .
 ```
 
 ### Running with Docker
 
 Because the app is graphical and needs file access, you must map your display server to the container and map a local directory as your data directory so the file picker can access it.
 
-#### 1. Basic GUI Mode
+#### 1. CPU-Only Mode
 
 **For X11:**
 ```bash
@@ -91,28 +97,64 @@ docker run --rm \
   -e RUST_LOG=info \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v $(pwd)/data:/app/data \
-  track-overlay --config /app/data/default_config.json --data-dir /app/data
+  track-overlay:cpu --config /app/data/default_config.json --data-dir /app/data
 ```
 
-**For Wayland (e.g., Cachy OS default):**
+**For Wayland:**
 ```bash
 docker run --rm \
   -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
   -e XDG_RUNTIME_DIR=/tmp \
+  -e XDG_SESSION_TYPE=wayland \
+  -e WINIT_UNIX_BACKEND=wayland \
   -e RUST_LOG=info \
   -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
   -v $(pwd)/data:/app/data \
-  track-overlay --config /app/data/default_config.json --data-dir /app/data
+  track-overlay:cpu --config /app/data/default_config.json --data-dir /app/data
 ```
 
-#### 2. Export Mode (CLI - No GUI required)
+#### 2. GPU-Accelerated Mode
+
+When running with the GPU-accelerated image, you must pass your host's GPU device to the container.
+
+**For AMD/Intel (Wayland):**
+```bash
+docker run --rm \
+  -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
+  -e XDG_RUNTIME_DIR=/tmp \
+  -e XDG_SESSION_TYPE=wayland \
+  -e WINIT_UNIX_BACKEND=wayland \
+  -e RUST_LOG=info \
+  -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
+  -v $(pwd)/data:/app/data \
+  --device /dev/dri \
+  track-overlay:gpu --config /app/data/default_config.json --data-dir /app/data
+```
+
+**For NVIDIA (Wayland, requires NVIDIA Container Toolkit):**
+```bash
+docker run --rm \
+  -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
+  -e XDG_RUNTIME_DIR=/tmp \
+  -e XDG_SESSION_TYPE=wayland \
+  -e WINIT_UNIX_BACKEND=wayland \
+  -e RUST_LOG=info \
+  -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
+  -v $(pwd)/data:/app/data \
+  --gpus all \
+  track-overlay:gpu --config /app/data/default_config.json --data-dir /app/data
+```
+
+> **Note on X11 with GPU:** If you are using X11 instead of Wayland, replace the Wayland environment variables and volume mounts with the X11 equivalents shown in the CPU-Only section, while keeping the `--device /dev/dri` or `--gpus all` flags.
+
+#### 3. Export Mode (CLI - No GUI required)
 If you just want to export a project and avoid messing with display servers entirely, you just need to mount your files.
 
 ```bash
 docker run --rm \
   -e RUST_LOG=info \
   -v $(pwd)/data:/app/data \
-  track-overlay --export /app/data/final_output.mp4 --config /app/data/my_project.json
+  track-overlay:cpu --export /app/data/final_output.mp4 --config /app/data/my_project.json
 ```
 
 

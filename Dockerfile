@@ -31,8 +31,8 @@ COPY . .
 # Build the application
 RUN cargo build --release
 
-# Final lightweight image
-FROM debian:bookworm-slim
+# Final lightweight image (CPU-only)
+FROM debian:bookworm-slim AS cpu
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
@@ -57,3 +57,18 @@ COPY --from=builder /usr/src/app/target/release/track-overlay /usr/local/bin/tra
 
 # We set the entrypoint so you can pass arguments directly
 ENTRYPOINT ["track-overlay"]
+
+# Final lightweight image (GPU support)
+FROM cpu AS gpu
+
+# Add bookworm-backports for newer Mesa drivers to support modern AMD/Intel GPUs
+RUN echo "deb http://deb.debian.org/debian bookworm-backports main" > /etc/apt/sources.list.d/backports.list
+
+# Install GPU drivers and wayland clipboard utilities
+RUN apt-get update && apt-get install -y -t bookworm-backports \
+    mesa-vulkan-drivers \
+    libegl-mesa0 \
+    libgl1-mesa-dri \
+    && apt-get install -y \
+    wl-clipboard \
+    && rm -rf /var/lib/apt/lists/*
