@@ -20,6 +20,7 @@ rusttype = "0.9.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 tempfile = "3.27.0"
+thiserror = "2.0.20"
 tiny-skia = "0.12.0"
 vello = "0.9.0"
 wgpu = "30.0.0"
