@@ -99,8 +99,8 @@ fn auto_correlate_gps_fallback(
     let mut best_offset = 0;
     let mut min_error = f64::MAX;
 
-    let telem_start = telem_dist.first().unwrap().0;
-    let telem_end = telem_dist.last().unwrap().0;
+    let telem_start = telem_dist.first()?.0;
+    let telem_end = telem_dist.last()?.0;
 
     // Coarse search first to find the approximate best offset quickly
     let mut coarse_best_offset = 0;

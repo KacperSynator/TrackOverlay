@@ -19,11 +19,10 @@ fn handle_pick_video(app: &mut MyApp, ctx: &egui::Context, path_buf: PathBuf) {
                 app.video_duration_ms = dur;
             }
             app.video_player = Some(player);
-            app.video_error = None;
         }
         Err(e) => {
             app.video_player = None;
-            app.video_error = Some(format!("Failed to load video: {}", e));
+            app.global_error = Some(crate::error::AppError::Video(e));
         }
     }
 }
@@ -55,7 +54,7 @@ fn handle_pick_config_load(app: &mut MyApp, ctx: &egui::Context, path_buf: PathB
         }
         Err(e) => {
             log::error!("Failed to load config: {}", e);
-            // Ideally we'd show this in the UI, but we log for now
+            app.global_error = Some(crate::error::AppError::Config(e));
         }
     }
 }
@@ -63,6 +62,7 @@ fn handle_pick_config_load(app: &mut MyApp, ctx: &egui::Context, path_buf: PathB
 fn handle_pick_config_save(app: &mut MyApp, path_buf: PathBuf) {
     if let Err(e) = app.config.save(&path_buf) {
         log::error!("Failed to save config: {}", e);
+        app.global_error = Some(crate::error::AppError::Config(e));
     }
 }
 

@@ -31,25 +31,25 @@ pub struct MyApp {
     pub auto_sync_progress: Option<Arc<Mutex<Option<i64>>>>,
     pub export_progress: Option<String>,
     pub active_export_progress: Option<Arc<Mutex<crate::export::ExportProgress>>>,
-    pub export_rx: crossbeam_channel::Receiver<anyhow::Result<()>>,
-    pub export_tx: crossbeam_channel::Sender<anyhow::Result<()>>,
+    pub export_rx: crossbeam_channel::Receiver<Result<(), crate::error::ExportError>>,
+    pub export_tx: crossbeam_channel::Sender<Result<(), crate::error::ExportError>>,
     pub export_start_was_active: bool,
     pub export_end_was_active: bool,
 
     pub merge_progress: Option<String>,
-    pub merge_rx: crossbeam_channel::Receiver<anyhow::Result<PathBuf>>,
-    pub merge_tx: crossbeam_channel::Sender<anyhow::Result<PathBuf>>,
+    pub merge_rx: crossbeam_channel::Receiver<Result<PathBuf, crate::error::MergeError>>,
+    pub merge_tx: crossbeam_channel::Sender<Result<PathBuf, crate::error::MergeError>>,
 
     pub file_dialog: FileDialog,
     pub dialog_mode: DialogMode,
 
     pub video_player: Option<VideoPlayer>,
-    pub video_error: Option<String>,
     pub video_texture: Option<egui::TextureHandle>,
     pub last_seek_ms: i64,
     pub video_duration_ms: i64,
 
     pub telemetry_laps: Vec<(u32, i64)>, // Lap number, start_time_ms
+    pub global_error: Option<crate::error::AppError>,
 }
 
 impl MyApp {
@@ -83,11 +83,11 @@ impl MyApp {
             file_dialog: fd,
             dialog_mode: DialogMode::None,
             video_player: None,
-            video_error: None,
             video_texture: None,
             last_seek_ms: -1,
             video_duration_ms: 60000,
             telemetry_laps: Vec::new(),
+            global_error: None,
         }
     }
 
@@ -139,6 +139,29 @@ impl MyApp {
         render_controls_window(self, &ctx);
         handle_dialogs(self, &ctx);
         render_video_panel(self, ui);
+
+        let mut clear_error = false;
+        if let Some(err) = &self.global_error {
+            let mut is_open = true;
+            egui::Window::new("Error")
+                .open(&mut is_open)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(&ctx, |ui| {
+                    ui.label(format!("{}", err));
+                    ui.add_space(10.0);
+                    if ui.button("Close").clicked() {
+                        clear_error = true;
+                    }
+                });
+            if !is_open {
+                clear_error = true;
+            }
+        }
+        if clear_error {
+            self.global_error = None;
+        }
     }
 }
 
@@ -171,18 +194,17 @@ impl eframe::App for MyApp {
                                 self.video_duration_ms = dur;
                             }
                             self.video_player = Some(player);
-                            self.video_error = None;
                             self.merge_progress = None;
                         }
                         Err(e) => {
                             self.video_player = None;
-                            self.video_error = Some(format!("Failed to load merged video: {}", e));
+                            self.global_error = Some(crate::error::AppError::Video(e));
                             self.merge_progress = None; // clear merge state to unlock UI
                         }
                     }
                 }
                 Err(e) => {
-                    self.video_error = Some(format!("Merge failed: {}", e));
+                    self.global_error = Some(crate::error::AppError::Merge(e));
                     self.merge_progress = None; // clear merge state to unlock UI
                 }
             }
@@ -192,7 +214,10 @@ impl eframe::App for MyApp {
             self.active_export_progress = None;
             match res {
                 Ok(_) => self.export_progress = Some("Export completed successfully.".to_string()),
-                Err(e) => self.export_progress = Some(format!("Export failed: {}", e)),
+                Err(e) => {
+                    self.global_error = Some(crate::error::AppError::Export(e));
+                    self.export_progress = Some("Export failed.".to_string());
+                }
             }
         }
         if self.active_export_progress.is_some() {

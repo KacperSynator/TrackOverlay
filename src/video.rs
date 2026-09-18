@@ -1,4 +1,3 @@
-use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
 use crossbeam_channel::{Sender, unbounded};
 
@@ -44,7 +43,10 @@ impl Drop for VideoPlayer {
 }
 
 impl VideoPlayer {
-    pub fn new<P: AsRef<Path>, F: Fn() + Send + 'static>(path: P, repaint_cb: F) -> Result<Self> {
+    pub fn new<P: AsRef<Path>, F: Fn() + Send + 'static>(
+        path: P,
+        repaint_cb: F,
+    ) -> Result<Self, crate::error::VideoError> {
         ffmpeg::init()?;
         let path_str = path.as_ref().to_string_lossy().to_string();
 
@@ -86,7 +88,7 @@ impl VideoPlayer {
         let stream = input_ctx
             .streams()
             .best(ffmpeg::media::Type::Video)
-            .ok_or_else(|| anyhow!("No video stream found"))?;
+            .ok_or(crate::error::VideoError::NoVideoStream)?;
 
         let video_stream_index = stream.index();
         let tb = stream.time_base();
@@ -207,7 +209,7 @@ impl VideoPlayer {
         })
     }
 
-    pub fn seek(&mut self, time_ms: i64) -> Result<()> {
+    pub fn seek(&mut self, time_ms: i64) -> Result<(), crate::error::VideoError> {
         let _ = self.cmd_tx.send(PlayerCommand::Seek(time_ms));
         Ok(())
     }
