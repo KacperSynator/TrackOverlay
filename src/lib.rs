@@ -1,4 +1,5 @@
 pub mod app;
+pub mod error;
 pub mod export;
 pub mod gpmf_extract;
 pub mod gui;

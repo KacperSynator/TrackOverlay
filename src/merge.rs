@@ -1,10 +1,10 @@
-use anyhow::{Context, Result};
+use crate::error::MergeError;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn get_metadata_value(video: &Path, key: &str) -> Result<Option<String>> {
+fn get_metadata_value(video: &Path, key: &str) -> Result<Option<String>, MergeError> {
     let output = Command::new("ffprobe")
         .arg("-v")
         .arg("quiet")
@@ -19,7 +19,7 @@ fn get_metadata_value(video: &Path, key: &str) -> Result<Option<String>> {
     Ok(if value.is_empty() { None } else { Some(value) })
 }
 
-pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
+pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf, MergeError> {
     let concat_file = tempfile::Builder::new()
         .prefix("trackoverlay_concat_")
         .suffix(".txt")
@@ -101,10 +101,7 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
         cmd.arg("-metadata").arg(format!("firmware={}", fw));
     }
 
-    let status = cmd
-        .arg(&output_path_buf)
-        .status()
-        .context("Failed to run ffmpeg command for concatenation")?;
+    let status = cmd.arg(&output_path_buf).status()?;
 
     // Cleanup concat file
     let _ = std::fs::remove_file(concat_path_buf);
@@ -112,7 +109,7 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf> {
     if !status.success() {
         // If it fails, try to cleanup output file
         let _ = std::fs::remove_file(&output_path_buf);
-        anyhow::bail!("ffmpeg concat failed with status: {}", status);
+        return Err(MergeError::CommandFailed(status));
     }
 
     Ok(output_path_buf)

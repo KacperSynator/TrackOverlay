@@ -75,9 +75,8 @@ fn render_load_telemetry(app: &mut MyApp, ui: &mut egui::Ui) {
                 dt.format("%Y-%m-%d %H:%M:%S UTC")
             ));
         }
-        if !telem.samples.is_empty() {
-            let telem_dur =
-                telem.samples.last().unwrap().time_ms - telem.samples.first().unwrap().time_ms;
+        if let (Some(first), Some(last)) = (telem.samples.first(), telem.samples.last()) {
+            let telem_dur = last.time_ms - first.time_ms;
             ui.label(format!("  Data Length: {}s", telem_dur / 1000));
         }
 
@@ -345,7 +344,8 @@ fn render_auto_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
         }
     } else {
         let mut done = false;
-        if let Ok(lock) = app.auto_sync_progress.as_ref().unwrap().lock()
+        if let Some(progress) = app.auto_sync_progress.as_ref()
+            && let Ok(lock) = progress.lock()
             && let Some(offset) = *lock
         {
             app.config.sync.offset_ms = offset;
