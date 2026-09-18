@@ -64,13 +64,13 @@ impl ProjectConfig {
     pub fn save<P: AsRef<std::path::Path>>(
         &self,
         path: P,
-    ) -> Result<(), crate::error::ProjectError> {
+    ) -> Result<(), crate::error::ConfigError> {
         let json = serde_json::to_string_pretty(self)?;
         std::fs::write(path, json)?;
         Ok(())
     }
 
-    pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self, crate::error::ProjectError> {
+    pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self, crate::error::ConfigError> {
         let json = std::fs::read_to_string(path)?;
         let config = serde_json::from_str(&json)?;
         Ok(config)

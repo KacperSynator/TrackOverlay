@@ -54,7 +54,7 @@ fn handle_pick_config_load(app: &mut MyApp, ctx: &egui::Context, path_buf: PathB
         }
         Err(e) => {
             log::error!("Failed to load config: {}", e);
-            app.global_error = Some(crate::error::AppError::Project(e));
+            app.global_error = Some(crate::error::AppError::Config(e));
         }
     }
 }
@@ -62,7 +62,7 @@ fn handle_pick_config_load(app: &mut MyApp, ctx: &egui::Context, path_buf: PathB
 fn handle_pick_config_save(app: &mut MyApp, path_buf: PathBuf) {
     if let Err(e) = app.config.save(&path_buf) {
         log::error!("Failed to save config: {}", e);
-        app.global_error = Some(crate::error::AppError::Project(e));
+        app.global_error = Some(crate::error::AppError::Config(e));
     }
 }
 
