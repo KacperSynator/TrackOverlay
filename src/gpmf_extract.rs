@@ -1,10 +1,10 @@
-use anyhow::{Result, anyhow};
+use crate::error::GpmfError;
 use std::process::Command;
 
 /// Attempts to extract the GPS5 data track from a GoPro MP4 via ffmpeg
 /// into a sequence of roughly {time_ms, lat, lon}.
 /// We use ffprobe to find the telemetry stream, then ffmpeg to dump it.
-pub fn extract_gopro_gps(video_path: &str) -> Result<Vec<(i64, f64, f64)>> {
+pub fn extract_gopro_gps(video_path: &str) -> Result<Vec<(i64, f64, f64)>, GpmfError> {
     // 1. Find telemetry stream
     let probe = Command::new("ffprobe")
         .args([
@@ -23,8 +23,7 @@ pub fn extract_gopro_gps(video_path: &str) -> Result<Vec<(i64, f64, f64)>> {
 
     let output_str = String::from_utf8_lossy(&probe.stdout);
 
-    let stream_idx =
-        parse_ffprobe_output(&output_str).ok_or_else(|| anyhow!("No GPMD stream found in MP4"))?;
+    let stream_idx = parse_ffprobe_output(&output_str).ok_or(GpmfError::NoGpmdStream)?;
 
     // 2. Dump stream data using ffmpeg to a temporary file
     let temp_gpmf = tempfile::NamedTempFile::new()?;
@@ -42,7 +41,7 @@ pub fn extract_gopro_gps(video_path: &str) -> Result<Vec<(i64, f64, f64)>> {
         .status()?;
 
     if !status.success() {
-        return Err(anyhow!("Failed to extract GPMD data track"));
+        return Err(GpmfError::ExtractionFailed);
     }
 
     // 3. Fallback: raw byte scan for GPS5

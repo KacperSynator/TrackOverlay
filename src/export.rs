@@ -1,7 +1,7 @@
 #![allow(clippy::collapsible_if)]
+use crate::error::ExportError;
 use crate::project::ProjectConfig;
 use crate::telemetry::TelemetryLog;
-use anyhow::{Result, anyhow};
 use ffmpeg_next as ffmpeg;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -29,12 +29,12 @@ pub fn export_video(
     telemetry: &TelemetryLog,
     output_path: &Path,
     progress: Option<Arc<Mutex<ExportProgress>>>,
-) -> Result<()> {
+) -> Result<(), ExportError> {
     println!("Starting export for {:?}", config.video_path);
 
     let video_path = config.video_path.to_str().unwrap_or("").to_string();
     if video_path.is_empty() {
-        return Err(anyhow!("No video path specified for export"));
+        return Err(ExportError::NoVideoPath);
     }
 
     ffmpeg::init()?;
@@ -43,7 +43,7 @@ pub fn export_video(
     let input_stream = input_ctx
         .streams()
         .best(ffmpeg::media::Type::Video)
-        .ok_or_else(|| anyhow!("No video stream found"))?;
+        .ok_or(ExportError::NoVideoStream)?;
 
     let video_stream_index = input_stream.index();
     let decoder_ctx = ffmpeg::codec::context::Context::from_parameters(input_stream.parameters())?;
@@ -57,8 +57,7 @@ pub fn export_video(
     let temp_path = output_path.with_extension("temp.mp4");
     let mut output_ctx = ffmpeg::format::output(&temp_path)?;
 
-    let encoder = ffmpeg::encoder::find(ffmpeg::codec::Id::H264)
-        .ok_or_else(|| anyhow!("H264 encoder not found"))?;
+    let encoder = ffmpeg::encoder::find(ffmpeg::codec::Id::H264).ok_or(ExportError::NoEncoder)?;
 
     let mut output_stream = output_ctx.add_stream(encoder)?;
 
@@ -81,7 +80,7 @@ pub fn export_video(
 
     let output_time_base = output_ctx
         .stream(0)
-        .ok_or_else(|| anyhow!("Output stream not found"))?
+        .ok_or(ExportError::NoOutputStream)?
         .time_base();
 
     let mut scaler_to_rgba = ffmpeg::software::scaling::Context::get(

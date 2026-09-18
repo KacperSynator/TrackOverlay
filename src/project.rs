@@ -61,13 +61,16 @@ pub struct ProjectConfig {
 }
 
 impl ProjectConfig {
-    pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> anyhow::Result<()> {
+    pub fn save<P: AsRef<std::path::Path>>(
+        &self,
+        path: P,
+    ) -> Result<(), crate::error::ProjectError> {
         let json = serde_json::to_string_pretty(self)?;
         std::fs::write(path, json)?;
         Ok(())
     }
 
-    pub fn load<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Self> {
+    pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self, crate::error::ProjectError> {
         let json = std::fs::read_to_string(path)?;
         let config = serde_json::from_str(&json)?;
         Ok(config)

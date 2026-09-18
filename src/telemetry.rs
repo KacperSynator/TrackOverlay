@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::TelemetryError;
 use chrono::{DateTime, TimeZone, Utc};
 use serde::Deserialize;
 use std::path::Path;
@@ -90,7 +90,7 @@ impl TelemetryLog {
     pub fn load_csv<P: AsRef<Path>>(
         path: P,
         speed_source: crate::project::SpeedSource,
-    ) -> Result<Self> {
+    ) -> Result<Self, TelemetryError> {
         let mut rdr = csv::ReaderBuilder::new()
             .comment(Some(b'#'))
             .from_path(path.as_ref())?;
@@ -218,7 +218,7 @@ impl TelemetryLog {
                 if idx == 0 {
                     Some(self.samples[0].clone())
                 } else if idx >= self.samples.len() {
-                    Some(self.samples.last().unwrap().clone())
+                    self.samples.last().cloned()
                 } else {
                     let s1 = &self.samples[idx - 1];
                     let s2 = &self.samples[idx];
@@ -354,7 +354,7 @@ impl<'a> TelemetryView<'a> {
                 if idx == 0 {
                     Some(self.adjust_sample(&self.samples[0]))
                 } else if idx >= self.samples.len() {
-                    Some(self.adjust_sample(self.samples.last().unwrap()))
+                    self.samples.last().map(|s| self.adjust_sample(s))
                 } else {
                     let s1 = &self.samples[idx - 1];
                     let s2 = &self.samples[idx];
