@@ -216,7 +216,7 @@ impl TelemetryLog {
             Ok(idx) => Some(self.samples[idx].clone()),
             Err(idx) => {
                 if idx == 0 {
-                    Some(self.samples[0].clone())
+                    self.samples.first().cloned()
                 } else if idx >= self.samples.len() {
                     self.samples.last().cloned()
                 } else {
@@ -352,7 +352,7 @@ impl<'a> TelemetryView<'a> {
             Ok(idx) => Some(self.adjust_sample(&self.samples[idx])),
             Err(idx) => {
                 if idx == 0 {
-                    Some(self.adjust_sample(&self.samples[0]))
+                    self.samples.first().map(|s| self.adjust_sample(s))
                 } else if idx >= self.samples.len() {
                     self.samples.last().map(|s| self.adjust_sample(s))
                 } else {
@@ -476,10 +476,17 @@ impl<'a> TelemetryView<'a> {
                     }
                     Err(idx) => {
                         if idx == 0 {
-                            best_lap_elapsed = best_lap_samples[0].time_ms - start_time;
+                            best_lap_elapsed = best_lap_samples
+                                .first()
+                                .map(|s| s.time_ms)
+                                .unwrap_or(start_time)
+                                - start_time;
                         } else if idx >= best_lap_samples.len() {
-                            best_lap_elapsed =
-                                best_lap_samples.last().unwrap().time_ms - start_time;
+                            best_lap_elapsed = best_lap_samples
+                                .last()
+                                .map(|s| s.time_ms)
+                                .unwrap_or(start_time)
+                                - start_time;
                         } else {
                             let s1 = best_lap_samples[idx - 1];
                             let s2 = best_lap_samples[idx];
@@ -586,10 +593,17 @@ impl TelemetryLog {
                     }
                     Err(idx) => {
                         if idx == 0 {
-                            best_lap_elapsed = best_lap_samples[0].time_ms - start_time;
+                            best_lap_elapsed = best_lap_samples
+                                .first()
+                                .map(|s| s.time_ms)
+                                .unwrap_or(start_time)
+                                - start_time;
                         } else if idx >= best_lap_samples.len() {
-                            best_lap_elapsed =
-                                best_lap_samples.last().unwrap().time_ms - start_time;
+                            best_lap_elapsed = best_lap_samples
+                                .last()
+                                .map(|s| s.time_ms)
+                                .unwrap_or(start_time)
+                                - start_time;
                         } else {
                             let s1 = best_lap_samples[idx - 1];
                             let s2 = best_lap_samples[idx];
