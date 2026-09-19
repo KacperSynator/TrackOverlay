@@ -20,35 +20,31 @@ fn get_metadata_value(video: &Path, key: &str) -> Result<Option<String>, MergeEr
 }
 
 pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf, MergeError> {
-    let concat_file = tempfile::Builder::new()
+    let mut concat_file = tempfile::Builder::new()
         .prefix("trackoverlay_concat_")
         .suffix(".txt")
         .tempfile()?;
+
+    // FFmpeg concat demuxer requires paths to be escaped or wrapped in quotes.
+    // Importantly, FFmpeg parses backslashes as escape characters even inside quotes.
+    // So we replace backslashes with forward slashes for cross-platform safety.
+    let path1_str = video1
+        .to_string_lossy()
+        .replace('\\', "/")
+        .replace('\'', "'\\''");
+    let path2_str = video2
+        .to_string_lossy()
+        .replace('\\', "/")
+        .replace('\'', "'\\''");
+
+    writeln!(concat_file, "file '{}'", path1_str)?;
+    writeln!(concat_file, "file '{}'", path2_str)?;
+    concat_file.flush()?;
 
     let concat_path = concat_file.into_temp_path();
     // Prevent the temp file from being deleted immediately
     let concat_path_buf = concat_path.to_path_buf();
     concat_path.keep()?;
-
-    {
-        let mut file = File::create(&concat_path_buf)?;
-
-        // FFmpeg concat demuxer requires paths to be escaped or wrapped in quotes.
-        // Importantly, FFmpeg parses backslashes as escape characters even inside quotes.
-        // So we replace backslashes with forward slashes for cross-platform safety.
-        let path1_str = video1
-            .to_string_lossy()
-            .replace('\\', "/")
-            .replace('\'', "'\\''");
-        let path2_str = video2
-            .to_string_lossy()
-            .replace('\\', "/")
-            .replace('\'', "'\\''");
-
-        writeln!(file, "file '{}'", path1_str)?;
-        writeln!(file, "file '{}'", path2_str)?;
-        file.flush()?;
-    }
 
     // Create the tempfile but immediately close the file handle,
     // saving only the path. This prevents file locking errors on Windows
