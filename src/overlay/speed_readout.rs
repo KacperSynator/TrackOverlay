@@ -22,12 +22,13 @@ impl OverlayImpl for SpeedReadout {
             rect.top() + el.y * rect.height(),
         );
 
+        let res_scale = rect.height() / 720.0;
         let text = common::get_speed_text(state.current_sample.as_ref());
         painter.text(
             center,
             egui::Align2::CENTER_CENTER,
             text,
-            egui::FontId::proportional(32.0 * el.scale),
+            egui::FontId::proportional(32.0 * el.scale * res_scale),
             egui::Color32::WHITE,
         );
     }

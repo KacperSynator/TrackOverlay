@@ -69,9 +69,10 @@ impl RpmOverlay {
         rpm: f32,
         rpm_max: f32,
         rpm_redline: f32,
+        res_scale: f32,
     ) {
-        let max_width = 300.0 * el.scale;
-        let height = 20.0 * el.scale;
+        let max_width = 300.0 * el.scale * res_scale;
+        let height = 20.0 * el.scale * res_scale;
         let bg_rect = egui::Rect::from_center_size(center, egui::vec2(max_width, height));
 
         let max_k = (rpm_max / 1000.0).floor() as i32;
@@ -87,10 +88,10 @@ impl RpmOverlay {
 
             let text = format!("{}", i);
             painter.text(
-                egui::pos2(x, bg_rect.top() - 10.0 * el.scale),
+                egui::pos2(x, bg_rect.top() - 12.0 * el.scale * res_scale),
                 egui::Align2::CENTER_BOTTOM,
                 text,
-                egui::FontId::proportional(14.0 * el.scale),
+                egui::FontId::proportional(14.0 * el.scale * res_scale),
                 color,
             );
         }
@@ -131,8 +132,9 @@ impl RpmOverlay {
         rpm: f32,
         rpm_max: f32,
         rpm_redline: f32,
+        res_scale: f32,
     ) {
-        let radius = 100.0 * el.scale;
+        let radius = 100.0 * el.scale * res_scale;
 
         let start_angle = -135.0_f32.to_radians();
         let end_angle = 135.0_f32.to_radians();
@@ -154,7 +156,10 @@ impl RpmOverlay {
         }
         painter.add(egui::Shape::line(
             bg_points,
-            egui::Stroke::new(10.0 * el.scale, egui::Color32::from_black_alpha(150)),
+            egui::Stroke::new(
+                10.0 * el.scale * res_scale,
+                egui::Color32::from_black_alpha(150),
+            ),
         ));
 
         // Draw redline arc
@@ -171,7 +176,7 @@ impl RpmOverlay {
             }
             painter.add(egui::Shape::line(
                 red_points,
-                egui::Stroke::new(10.0 * el.scale, egui::Color32::RED),
+                egui::Stroke::new(10.0 * el.scale * res_scale, egui::Color32::RED),
             ));
         }
 
@@ -182,7 +187,7 @@ impl RpmOverlay {
             let angle = start_angle + ratio * angle_range;
             let rotated_angle = angle - PI / 2.0;
 
-            let label_radius = radius - 20.0 * el.scale;
+            let label_radius = radius - 20.0 * el.scale * res_scale;
             let text_pos = center
                 + egui::vec2(
                     rotated_angle.cos() * label_radius,
@@ -199,7 +204,7 @@ impl RpmOverlay {
                 text_pos,
                 egui::Align2::CENTER_CENTER,
                 format!("{}", i),
-                egui::FontId::proportional(14.0 * el.scale),
+                egui::FontId::proportional(14.0 * el.scale * res_scale),
                 color,
             );
         }
@@ -216,9 +221,9 @@ impl RpmOverlay {
 
         painter.line_segment(
             [center, needle_end],
-            egui::Stroke::new(3.0 * el.scale, egui::Color32::WHITE),
+            egui::Stroke::new(3.0 * el.scale * res_scale, egui::Color32::WHITE),
         );
-        painter.circle_filled(center, 5.0 * el.scale, egui::Color32::WHITE);
+        painter.circle_filled(center, 5.0 * el.scale * res_scale, egui::Color32::WHITE);
     }
 
     // --- LEDS UI ---
@@ -229,10 +234,11 @@ impl RpmOverlay {
         rpm: f32,
         rpm_max: f32,
         rpm_redline: f32,
+        res_scale: f32,
     ) {
         let num_leds = GREEN_LEDS + YELLOW_LEDS + RED_LEDS;
-        let led_radius = DEFAULT_LED_RADIUS * el.scale;
-        let spacing = DEFAULT_LED_SPACING * el.scale;
+        let led_radius = DEFAULT_LED_RADIUS * el.scale * res_scale;
+        let spacing = DEFAULT_LED_SPACING * el.scale * res_scale;
         let total_width = (num_leds - 1) as f32 * spacing;
         let start_x = center.x - total_width / 2.0;
 
@@ -305,7 +311,7 @@ impl RpmOverlay {
             };
 
             let text = format!("{}", i);
-            let y = top - 8.0 * el.scale * res_scale;
+            let y = top - 12.0 * el.scale * res_scale;
 
             if let Some(font) = font_opt {
                 crate::overlay::common::draw_text(
@@ -626,10 +632,17 @@ impl OverlayImpl for RpmOverlay {
             .map_or(0.0, |s| s.engine_speed_rpm)
             .clamp(0.0, rpm_max);
 
+        let res_scale = rect.height() / 720.0;
         match style {
-            RpmStyle::Bar => Self::render_bar_ui(&painter, center, el, rpm, rpm_max, rpm_redline),
-            RpmStyle::Dial => Self::render_dial_ui(&painter, center, el, rpm, rpm_max, rpm_redline),
-            RpmStyle::Leds => Self::render_leds_ui(&painter, center, el, rpm, rpm_max, rpm_redline),
+            RpmStyle::Bar => {
+                Self::render_bar_ui(&painter, center, el, rpm, rpm_max, rpm_redline, res_scale)
+            }
+            RpmStyle::Dial => {
+                Self::render_dial_ui(&painter, center, el, rpm, rpm_max, rpm_redline, res_scale)
+            }
+            RpmStyle::Leds => {
+                Self::render_leds_ui(&painter, center, el, rpm, rpm_max, rpm_redline, res_scale)
+            }
         }
     }
 

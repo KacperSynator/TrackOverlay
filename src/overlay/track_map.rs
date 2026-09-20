@@ -21,9 +21,10 @@ impl OverlayImpl for TrackMapOverlay {
             rect.left() + el.x * rect.width(),
             rect.top() + el.y * rect.height(),
         );
+        let res_scale = rect.height() / 720.0;
 
         if let Some(map) = trackmap {
-            let map_size = 150.0 * el.scale;
+            let map_size = 150.0 * el.scale * res_scale;
             let map_rect = egui::Rect::from_center_size(center, egui::vec2(map_size, map_size));
 
             let mut path = Vec::with_capacity(map.outline.len());
@@ -37,7 +38,10 @@ impl OverlayImpl for TrackMapOverlay {
             if path.len() > 1 {
                 painter.add(egui::Shape::line(
                     path,
-                    egui::Stroke::new(2.0 * el.scale, egui::Color32::from_white_alpha(150)),
+                    egui::Stroke::new(
+                        2.0 * el.scale * res_scale,
+                        egui::Color32::from_white_alpha(150),
+                    ),
                 ));
             }
 
@@ -53,11 +57,11 @@ impl OverlayImpl for TrackMapOverlay {
                 );
                 painter.line_segment(
                     [sp1, sp2],
-                    egui::Stroke::new(3.0 * el.scale, egui::Color32::GREEN),
+                    egui::Stroke::new(3.0 * el.scale * res_scale, egui::Color32::GREEN),
                 );
 
                 let mid_p = egui::pos2((sp1.x + sp2.x) / 2.0, (sp1.y + sp2.y) / 2.0);
-                painter.circle_filled(mid_p, 3.0 * el.scale, egui::Color32::GREEN);
+                painter.circle_filled(mid_p, 3.0 * el.scale * res_scale, egui::Color32::GREEN);
             }
 
             if let Some(s) = state.current_sample.as_ref()
@@ -67,7 +71,7 @@ impl OverlayImpl for TrackMapOverlay {
                     map_rect.left() + cx * map_rect.width(),
                     map_rect.top() + cy * map_rect.height(),
                 );
-                painter.circle_filled(dot_pos, 4.0 * el.scale, egui::Color32::RED);
+                painter.circle_filled(dot_pos, 4.0 * el.scale * res_scale, egui::Color32::RED);
             }
         }
     }

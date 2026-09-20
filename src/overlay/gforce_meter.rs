@@ -67,25 +67,32 @@ impl OverlayImpl for GForceMeter {
             rect.top() + el.y * rect.height(),
         );
 
-        let base_radius = 40.0 * el.scale;
+        let res_scale = rect.height() / 720.0;
+        let base_radius = 40.0 * el.scale * res_scale;
 
         // 0.5G circle (inner)
         painter.circle_stroke(
             center,
             base_radius * 0.5,
-            egui::Stroke::new(1.0_f32 * el.scale, egui::Color32::from_white_alpha(128)),
+            egui::Stroke::new(
+                1.0_f32 * el.scale * res_scale,
+                egui::Color32::from_white_alpha(128),
+            ),
         );
         // 1.0G circle (middle)
         painter.circle_stroke(
             center,
             base_radius,
-            egui::Stroke::new(1.0_f32 * el.scale, egui::Color32::from_white_alpha(128)),
+            egui::Stroke::new(
+                1.0_f32 * el.scale * res_scale,
+                egui::Color32::from_white_alpha(128),
+            ),
         );
         // 1.5G circle (outer)
         painter.circle_stroke(
             center,
             base_radius * 1.5,
-            egui::Stroke::new(2.0_f32 * el.scale, egui::Color32::WHITE),
+            egui::Stroke::new(2.0_f32 * el.scale * res_scale, egui::Color32::WHITE),
         );
 
         let (invert_x, invert_y, swap_axes) = Self::extract_options(el);
@@ -93,20 +100,20 @@ impl OverlayImpl for GForceMeter {
         let (dx, dy) = Self::apply_axis_config(raw_dx, raw_dy, invert_x, invert_y, swap_axes);
 
         let dot_pos = center + egui::vec2(dx, dy);
-        painter.circle_filled(dot_pos, 5.0_f32 * el.scale, egui::Color32::RED);
+        painter.circle_filled(dot_pos, 5.0_f32 * el.scale * res_scale, egui::Color32::RED);
 
         // Render combined G value text
         let lat_g = state.current_sample.as_ref().map_or(0.0, |s| s.accel_lat_g);
         let lon_g = state.current_sample.as_ref().map_or(0.0, |s| s.accel_lon_g);
         let combined_g = (lat_g * lat_g + lon_g * lon_g).sqrt();
 
-        let text_pos = center - egui::vec2(0.0, base_radius * 1.5 + 5.0 * el.scale);
+        let text_pos = center - egui::vec2(0.0, base_radius * 1.5 + 5.0 * el.scale * res_scale);
 
         painter.text(
             text_pos,
             egui::Align2::CENTER_BOTTOM,
             format!("{:.1} G", combined_g),
-            egui::FontId::proportional(20.0 * el.scale),
+            egui::FontId::proportional(20.0 * el.scale * res_scale),
             egui::Color32::WHITE,
         );
     }

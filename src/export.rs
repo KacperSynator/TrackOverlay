@@ -72,6 +72,7 @@ pub fn export_video(
 
     let mut opts = ffmpeg::Dictionary::new();
     opts.set("preset", "medium");
+    opts.set("crf", "20");
     let mut encoder = encoder_ctx_video.open_as_with(encoder, opts)?;
 
     output_stream.set_parameters(&encoder);
