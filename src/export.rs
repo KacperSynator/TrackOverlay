@@ -188,16 +188,15 @@ pub fn export_video(
     let original_video_rotation = {
         let fetch_rotation = || -> Option<f64> {
             let output = std::process::Command::new("ffprobe")
-                .args([
-                    "-v",
-                    "quiet",
-                    "-select_streams",
-                    "v:0",
-                    "-show_streams",
-                    "-of",
-                    "json",
-                    &video_path,
-                ])
+                .arg("-v")
+                .arg("quiet")
+                .arg("-select_streams")
+                .arg("v:0")
+                .arg("-show_streams")
+                .arg("-of")
+                .arg("json")
+                .arg("-i")
+                .arg(&video_path)
                 .output()
                 .ok()?;
 

@@ -84,16 +84,15 @@ impl VideoPlayer {
         // Helper function to extract rotation from ffprobe JSON output
         let fetch_rotation = || -> Option<f64> {
             let output = Command::new("ffprobe")
-                .args([
-                    "-v",
-                    "quiet",
-                    "-select_streams",
-                    "v:0",
-                    "-show_streams",
-                    "-of",
-                    "json",
-                    &path_str,
-                ])
+                .arg("-v")
+                .arg("quiet")
+                .arg("-select_streams")
+                .arg("v:0")
+                .arg("-show_streams")
+                .arg("-of")
+                .arg("json")
+                .arg("-i")
+                .arg(&path_str)
                 .output()
                 .ok()?;
 

@@ -54,8 +54,7 @@ fn render_load_video(app: &mut MyApp, ui: &mut egui::Ui) {
                 "Original Video Rotation: {}° (export will automatically correct this)",
                 app.original_video_rotation
             ))
-            .color(egui::Color32::YELLOW)
-            .small(),
+            .color(egui::Color32::YELLOW),
         );
     }
 
