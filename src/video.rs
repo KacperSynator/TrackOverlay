@@ -98,49 +98,42 @@ impl VideoPlayer {
                 .ok()?;
 
             let stdout = String::from_utf8_lossy(&output.stdout);
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                if let Some(streams) = json.get("streams").and_then(|s| s.as_array()) {
-                    if let Some(stream) = streams.first() {
-                        // Check side_data_list for Display Matrix (used by GoPro and others)
-                        if let Some(side_data) =
-                            stream.get("side_data_list").and_then(|s| s.as_array())
-                        {
-                            for item in side_data {
-                                if item.get("side_data_type").and_then(|t| t.as_str())
-                                    == Some("Display Matrix")
-                                {
-                                    if let Some(rot) = item
-                                        .get("rotation")
-                                        .and_then(|r| r.as_f64())
-                                        .or_else(|| {
-                                            item.get("rotation")
-                                                .and_then(|r| r.as_i64())
-                                                .map(|i| i as f64)
-                                        })
-                                    {
-                                        return Some(rot);
-                                    }
-                                }
-                            }
-                        }
-
-                        // Fallback to tags.rotate or tags.rotation
-                        if let Some(tags) = stream.get("tags").and_then(|t| t.as_object()) {
-                            if let Some(rot) = tags
-                                .get("rotate")
-                                .and_then(|r| r.as_str())
-                                .and_then(|s| s.parse::<f64>().ok())
-                            {
-                                return Some(rot);
-                            }
-                            if let Some(rot) = tags
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout)
+                && let Some(streams) = json.get("streams").and_then(|s| s.as_array())
+                && let Some(stream) = streams.first()
+            {
+                // Check side_data_list for Display Matrix (used by GoPro and others)
+                if let Some(side_data) = stream.get("side_data_list").and_then(|s| s.as_array()) {
+                    for item in side_data {
+                        if item.get("side_data_type").and_then(|t| t.as_str())
+                            == Some("Display Matrix")
+                            && let Some(rot) = item
                                 .get("rotation")
-                                .and_then(|r| r.as_str())
-                                .and_then(|s| s.parse::<f64>().ok())
-                            {
-                                return Some(rot);
-                            }
+                                .and_then(|r| r.as_f64())
+                                .or_else(|| {
+                                    item.get("rotation").and_then(|r| r.as_i64()).map(|i| i as f64)
+                                })
+                        {
+                            return Some(rot);
                         }
+                    }
+                }
+
+                // Fallback to tags.rotate or tags.rotation
+                if let Some(tags) = stream.get("tags").and_then(|t| t.as_object()) {
+                    if let Some(rot) = tags
+                        .get("rotate")
+                        .and_then(|r| r.as_str())
+                        .and_then(|s| s.parse::<f64>().ok())
+                    {
+                        return Some(rot);
+                    }
+                    if let Some(rot) = tags
+                        .get("rotation")
+                        .and_then(|r| r.as_str())
+                        .and_then(|s| s.parse::<f64>().ok())
+                    {
+                        return Some(rot);
                     }
                 }
             }
