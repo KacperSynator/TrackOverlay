@@ -107,11 +107,11 @@ impl VideoPlayer {
                     for item in side_data {
                         if item.get("side_data_type").and_then(|t| t.as_str())
                             == Some("Display Matrix")
-                            && let Some(rot) = item
-                                .get("rotation")
-                                .and_then(|r| r.as_f64())
-                                .or_else(|| {
-                                    item.get("rotation").and_then(|r| r.as_i64()).map(|i| i as f64)
+                            && let Some(rot) =
+                                item.get("rotation").and_then(|r| r.as_f64()).or_else(|| {
+                                    item.get("rotation")
+                                        .and_then(|r| r.as_i64())
+                                        .map(|i| i as f64)
                                 })
                         {
                             return Some(rot);
