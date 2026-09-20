@@ -184,6 +184,79 @@ pub fn export_video(
     let mut first_pts: Option<i64> = None;
     let mut packed_data = Vec::new();
 
+    // Fetch video rotation once
+    let original_video_rotation = {
+        let fetch_rotation = || -> Option<f64> {
+            let output = std::process::Command::new("ffprobe")
+                .args([
+                    "-v",
+                    "quiet",
+                    "-select_streams",
+                    "v:0",
+                    "-show_streams",
+                    "-of",
+                    "json",
+                    &video_path,
+                ])
+                .output()
+                .ok()?;
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                if let Some(streams) = json.get("streams").and_then(|s| s.as_array()) {
+                    if let Some(stream) = streams.first() {
+                        if let Some(side_data) =
+                            stream.get("side_data_list").and_then(|s| s.as_array())
+                        {
+                            for item in side_data {
+                                if item.get("side_data_type").and_then(|t| t.as_str())
+                                    == Some("Display Matrix")
+                                {
+                                    if let Some(rot) = item
+                                        .get("rotation")
+                                        .and_then(|r| r.as_f64())
+                                        .or_else(|| {
+                                            item.get("rotation")
+                                                .and_then(|r| r.as_i64())
+                                                .map(|i| i as f64)
+                                        })
+                                    {
+                                        return Some(rot);
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(tags) = stream.get("tags").and_then(|t| t.as_object()) {
+                            if let Some(rot) = tags
+                                .get("rotate")
+                                .and_then(|r| r.as_str())
+                                .and_then(|s| s.parse::<f64>().ok())
+                            {
+                                return Some(rot);
+                            }
+                            if let Some(rot) = tags
+                                .get("rotation")
+                                .and_then(|r| r.as_str())
+                                .and_then(|s| s.parse::<f64>().ok())
+                            {
+                                return Some(rot);
+                            }
+                        }
+                    }
+                }
+            }
+            None
+        };
+        fetch_rotation().unwrap_or(0.0)
+    };
+
+    let mut flip_h = config.flip_horizontal;
+    let mut flip_v = config.flip_vertical;
+    if (original_video_rotation.abs() - 180.0).abs() < 0.1 {
+        flip_h = !flip_h;
+        flip_v = !flip_v;
+    }
+
     for (stream, packet) in input_ctx.packets() {
         if finished {
             break;
@@ -238,16 +311,12 @@ pub fn export_video(
 
                 packed_data.resize((w * h * 4) as usize, 0);
                 for y in 0..h as usize {
-                    let src_y = if config.flip_vertical {
-                        (h as usize - 1) - y
-                    } else {
-                        y
-                    };
+                    let src_y = if flip_v { (h as usize - 1) - y } else { y };
 
                     let src_start = src_y * stride;
                     let dst_start = y * (w * 4) as usize;
 
-                    if config.flip_horizontal {
+                    if flip_h {
                         for x in 0..w as usize {
                             let src_x = (w as usize - 1) - x;
                             let src_idx = src_start + src_x * 4;
@@ -320,10 +389,23 @@ pub fn export_video(
 
         packed_data.resize((w * h * 4) as usize, 0);
         for y in 0..h as usize {
-            let src_start = y * stride;
+            let src_y = if flip_v { (h as usize - 1) - y } else { y };
+
+            let src_start = src_y * stride;
             let dst_start = y * (w * 4) as usize;
-            packed_data[dst_start..dst_start + (w * 4) as usize]
-                .copy_from_slice(&raw_data[src_start..src_start + (w * 4) as usize]);
+
+            if flip_h {
+                for x in 0..w as usize {
+                    let src_x = (w as usize - 1) - x;
+                    let src_idx = src_start + src_x * 4;
+                    let dst_idx = dst_start + x * 4;
+                    packed_data[dst_idx..dst_idx + 4]
+                        .copy_from_slice(&raw_data[src_idx..src_idx + 4]);
+                }
+            } else {
+                packed_data[dst_start..dst_start + (w * 4) as usize]
+                    .copy_from_slice(&raw_data[src_start..src_start + (w * 4) as usize]);
+            }
         }
 
         if let Some(mut pixmap) = tiny_skia::PixmapMut::from_bytes(&mut packed_data, w, h) {

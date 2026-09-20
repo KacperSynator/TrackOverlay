@@ -48,6 +48,17 @@ fn render_load_video(app: &mut MyApp, ui: &mut egui::Ui) {
         ui.label(format!("  Duration: {}s", app.video_duration_ms / 1000));
     }
 
+    if app.original_video_rotation.abs() > 0.1 {
+        ui.label(
+            egui::RichText::new(format!(
+                "Original Video Rotation: {}° (export will automatically correct this)",
+                app.original_video_rotation
+            ))
+            .color(egui::Color32::YELLOW)
+            .small(),
+        );
+    }
+
     if let Some(msg) = &app.merge_progress {
         ui.label(msg);
     }
