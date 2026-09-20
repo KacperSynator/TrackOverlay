@@ -185,69 +185,7 @@ pub fn export_video(
     let mut packed_data = Vec::new();
 
     // Fetch video rotation once
-    let original_video_rotation = {
-        let fetch_rotation = || -> Option<f64> {
-            let output = std::process::Command::new("ffprobe")
-                .arg("-v")
-                .arg("quiet")
-                .arg("-select_streams")
-                .arg("v:0")
-                .arg("-show_streams")
-                .arg("-of")
-                .arg("json")
-                .arg("-i")
-                .arg(&video_path)
-                .output()
-                .ok()?;
-
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                if let Some(streams) = json.get("streams").and_then(|s| s.as_array()) {
-                    if let Some(stream) = streams.first() {
-                        if let Some(side_data) =
-                            stream.get("side_data_list").and_then(|s| s.as_array())
-                        {
-                            for item in side_data {
-                                if item.get("side_data_type").and_then(|t| t.as_str())
-                                    == Some("Display Matrix")
-                                {
-                                    if let Some(rot) = item
-                                        .get("rotation")
-                                        .and_then(|r| r.as_f64())
-                                        .or_else(|| {
-                                            item.get("rotation")
-                                                .and_then(|r| r.as_i64())
-                                                .map(|i| i as f64)
-                                        })
-                                    {
-                                        return Some(rot);
-                                    }
-                                }
-                            }
-                        }
-                        if let Some(tags) = stream.get("tags").and_then(|t| t.as_object()) {
-                            if let Some(rot) = tags
-                                .get("rotate")
-                                .and_then(|r| r.as_str())
-                                .and_then(|s| s.parse::<f64>().ok())
-                            {
-                                return Some(rot);
-                            }
-                            if let Some(rot) = tags
-                                .get("rotation")
-                                .and_then(|r| r.as_str())
-                                .and_then(|s| s.parse::<f64>().ok())
-                            {
-                                return Some(rot);
-                            }
-                        }
-                    }
-                }
-            }
-            None
-        };
-        fetch_rotation().unwrap_or(0.0)
-    };
+    let original_video_rotation = crate::video::get_video_rotation(&video_path).unwrap_or(0.0);
 
     let mut flip_h = config.flip_horizontal;
     let mut flip_v = config.flip_vertical;
