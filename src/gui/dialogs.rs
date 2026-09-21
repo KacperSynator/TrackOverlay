@@ -18,6 +18,7 @@ fn handle_pick_video(app: &mut MyApp, ctx: &egui::Context, path_buf: PathBuf) {
             if let Some(dur) = player.duration_ms() {
                 app.video_duration_ms = dur;
             }
+            app.original_video_rotation = player.rotation();
             app.video_player = Some(player);
         }
         Err(e) => {
