@@ -69,9 +69,12 @@ pub fn export_video(
     encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
     encoder_ctx_video.set_time_base(time_base);
     encoder_ctx_video.set_frame_rate(Some(frame_rate));
+    encoder_ctx_video.set_color_range(ffmpeg::util::color::Range::JPEG);
+    encoder_ctx_video.set_flags(ffmpeg::codec::flag::Flags::GLOBAL_HEADER);
 
     let mut opts = ffmpeg::Dictionary::new();
     opts.set("preset", "medium");
+    opts.set("crf", "18");
     let mut encoder = encoder_ctx_video.open_as_with(encoder, opts)?;
 
     output_stream.set_parameters(&encoder);
