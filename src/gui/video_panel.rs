@@ -11,19 +11,10 @@ fn draw_video_frame(app: &mut MyApp, ui: &mut egui::Ui, draw_rect: egui::Rect) {
         let mut min_pos = egui::pos2(0.0, 0.0);
         let mut max_pos = egui::pos2(1.0, 1.0);
 
-        let mut flip_h = app.config.flip_horizontal;
-        let mut flip_v = app.config.flip_vertical;
-
-        // An original rotation of 180 degrees is equivalent to both a vertical and horizontal flip.
-        if (app.original_video_rotation.abs() - 180.0).abs() < 0.1 {
-            flip_h = !flip_h;
-            flip_v = !flip_v;
-        }
-
-        if flip_h {
+        if app.config.flip_horizontal {
             std::mem::swap(&mut min_pos.x, &mut max_pos.x);
         }
-        if flip_v {
+        if app.config.flip_vertical {
             std::mem::swap(&mut min_pos.y, &mut max_pos.y);
         }
 

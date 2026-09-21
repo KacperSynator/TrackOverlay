@@ -101,6 +101,7 @@ impl OverlayImpl for ThrottleBar {
             rect.left() + el.x * rect.width(),
             rect.top() + el.y * rect.height(),
         );
+        let res_scale = rect.height() / 1080.0;
 
         let throttle = common::get_throttle_ratio(state.current_sample.as_ref());
 
@@ -110,8 +111,8 @@ impl OverlayImpl for ThrottleBar {
             .map(|v| serde_json::from_value(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let width = 20.0 * el.scale;
-        let max_height = 100.0 * el.scale;
+        let width = 30.0 * el.scale * res_scale;
+        let max_height = 150.0 * el.scale * res_scale;
 
         let bg_rect = egui::Rect::from_center_size(center, egui::vec2(width, max_height));
         painter.rect_filled(bg_rect, 2.0, egui::Color32::from_black_alpha(150));
@@ -129,7 +130,7 @@ impl OverlayImpl for ThrottleBar {
         painter.rect_filled(fill_rect, 2.0, egui::Color32::GREEN);
 
         if config.show_brake {
-            draw_brake_ui(&painter, bg_rect, el.scale, state);
+            draw_brake_ui(&painter, bg_rect, el.scale * res_scale, state);
         }
     }
 
@@ -143,7 +144,7 @@ impl OverlayImpl for ThrottleBar {
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
-        let res_scale = height / 720.0;
+        let res_scale = height / 1080.0;
         let center_x = el.x * width;
         let center_y = el.y * height;
 
@@ -155,8 +156,8 @@ impl OverlayImpl for ThrottleBar {
 
         let throttle = common::get_throttle_ratio(state.current_sample.as_ref());
 
-        let w = 20.0 * el.scale * res_scale;
-        let max_h = 100.0 * el.scale * res_scale;
+        let w = 30.0 * el.scale * res_scale;
+        let max_h = 150.0 * el.scale * res_scale;
 
         let left = center_x - w / 2.0;
         let top = center_y - max_h / 2.0;

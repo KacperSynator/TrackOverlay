@@ -21,9 +21,10 @@ impl OverlayImpl for TrackMapOverlay {
             rect.left() + el.x * rect.width(),
             rect.top() + el.y * rect.height(),
         );
+        let res_scale = rect.height() / 1080.0;
 
         if let Some(map) = trackmap {
-            let map_size = 150.0 * el.scale;
+            let map_size = 225.0 * el.scale * res_scale;
             let map_rect = egui::Rect::from_center_size(center, egui::vec2(map_size, map_size));
 
             let mut path = Vec::with_capacity(map.outline.len());
@@ -37,7 +38,10 @@ impl OverlayImpl for TrackMapOverlay {
             if path.len() > 1 {
                 painter.add(egui::Shape::line(
                     path,
-                    egui::Stroke::new(2.0 * el.scale, egui::Color32::from_white_alpha(150)),
+                    egui::Stroke::new(
+                        3.0 * el.scale * res_scale,
+                        egui::Color32::from_white_alpha(150),
+                    ),
                 ));
             }
 
@@ -53,11 +57,11 @@ impl OverlayImpl for TrackMapOverlay {
                 );
                 painter.line_segment(
                     [sp1, sp2],
-                    egui::Stroke::new(3.0 * el.scale, egui::Color32::GREEN),
+                    egui::Stroke::new(4.5 * el.scale * res_scale, egui::Color32::GREEN),
                 );
 
                 let mid_p = egui::pos2((sp1.x + sp2.x) / 2.0, (sp1.y + sp2.y) / 2.0);
-                painter.circle_filled(mid_p, 3.0 * el.scale, egui::Color32::GREEN);
+                painter.circle_filled(mid_p, 4.5 * el.scale * res_scale, egui::Color32::GREEN);
             }
 
             if let Some(s) = state.current_sample.as_ref()
@@ -67,7 +71,7 @@ impl OverlayImpl for TrackMapOverlay {
                     map_rect.left() + cx * map_rect.width(),
                     map_rect.top() + cy * map_rect.height(),
                 );
-                painter.circle_filled(dot_pos, 4.0 * el.scale, egui::Color32::RED);
+                painter.circle_filled(dot_pos, 6.0 * el.scale * res_scale, egui::Color32::RED);
             }
         }
     }
@@ -82,12 +86,12 @@ impl OverlayImpl for TrackMapOverlay {
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
-        let res_scale = height / 720.0;
+        let res_scale = height / 1080.0;
         let center_x = el.x * width;
         let center_y = el.y * height;
 
         if let Some(map) = trackmap {
-            let map_size = 150.0 * el.scale * res_scale;
+            let map_size = 225.0 * el.scale * res_scale;
             let left = center_x - map_size / 2.0;
             let top = center_y - map_size / 2.0;
 
@@ -111,7 +115,7 @@ impl OverlayImpl for TrackMapOverlay {
                 paint.anti_alias = true;
 
                 let stroke = Stroke {
-                    width: 2.0 * el.scale * res_scale,
+                    width: 3.0 * el.scale * res_scale,
                     ..Default::default()
                 };
 
@@ -134,7 +138,7 @@ impl OverlayImpl for TrackMapOverlay {
                     paint.set_color_rgba8(0, 255, 0, 255);
                     paint.anti_alias = true;
                     let stroke = Stroke {
-                        width: 3.0 * el.scale * res_scale,
+                        width: 4.5 * el.scale * res_scale,
                         ..Default::default()
                     };
                     pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
@@ -147,7 +151,7 @@ impl OverlayImpl for TrackMapOverlay {
                 paint.anti_alias = true;
 
                 if let Some(path) =
-                    PathBuilder::from_circle(mid_x, mid_y, 3.0 * el.scale * res_scale)
+                    PathBuilder::from_circle(mid_x, mid_y, 4.5 * el.scale * res_scale)
                 {
                     pixmap.fill_path(
                         &path,
@@ -170,7 +174,7 @@ impl OverlayImpl for TrackMapOverlay {
                 paint.anti_alias = true;
 
                 if let Some(path) =
-                    PathBuilder::from_circle(dot_x, dot_y, 4.0 * el.scale * res_scale)
+                    PathBuilder::from_circle(dot_x, dot_y, 6.0 * el.scale * res_scale)
                 {
                     pixmap.fill_path(
                         &path,

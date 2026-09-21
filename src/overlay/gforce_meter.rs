@@ -67,25 +67,32 @@ impl OverlayImpl for GForceMeter {
             rect.top() + el.y * rect.height(),
         );
 
-        let base_radius = 40.0 * el.scale;
+        let res_scale = rect.height() / 1080.0;
+        let base_radius = 60.0 * el.scale * res_scale;
 
         // 0.5G circle (inner)
         painter.circle_stroke(
             center,
             base_radius * 0.5,
-            egui::Stroke::new(1.0_f32 * el.scale, egui::Color32::from_white_alpha(128)),
+            egui::Stroke::new(
+                1.0_f32 * el.scale * res_scale,
+                egui::Color32::from_white_alpha(128),
+            ),
         );
         // 1.0G circle (middle)
         painter.circle_stroke(
             center,
             base_radius,
-            egui::Stroke::new(1.0_f32 * el.scale, egui::Color32::from_white_alpha(128)),
+            egui::Stroke::new(
+                1.0_f32 * el.scale * res_scale,
+                egui::Color32::from_white_alpha(128),
+            ),
         );
         // 1.5G circle (outer)
         painter.circle_stroke(
             center,
             base_radius * 1.5,
-            egui::Stroke::new(2.0_f32 * el.scale, egui::Color32::WHITE),
+            egui::Stroke::new(2.0_f32 * el.scale * res_scale, egui::Color32::WHITE),
         );
 
         let (invert_x, invert_y, swap_axes) = Self::extract_options(el);
@@ -93,20 +100,20 @@ impl OverlayImpl for GForceMeter {
         let (dx, dy) = Self::apply_axis_config(raw_dx, raw_dy, invert_x, invert_y, swap_axes);
 
         let dot_pos = center + egui::vec2(dx, dy);
-        painter.circle_filled(dot_pos, 5.0_f32 * el.scale, egui::Color32::RED);
+        painter.circle_filled(dot_pos, 5.0_f32 * el.scale * res_scale, egui::Color32::RED);
 
         // Render combined G value text
         let lat_g = state.current_sample.as_ref().map_or(0.0, |s| s.accel_lat_g);
         let lon_g = state.current_sample.as_ref().map_or(0.0, |s| s.accel_lon_g);
         let combined_g = (lat_g * lat_g + lon_g * lon_g).sqrt();
 
-        let text_pos = center - egui::vec2(0.0, base_radius * 1.5 + 5.0 * el.scale);
+        let text_pos = center - egui::vec2(0.0, base_radius * 1.5 + 7.5 * el.scale * res_scale);
 
         painter.text(
             text_pos,
             egui::Align2::CENTER_BOTTOM,
             format!("{:.1} G", combined_g),
-            egui::FontId::proportional(20.0 * el.scale),
+            egui::FontId::proportional(30.0 * el.scale * res_scale),
             egui::Color32::WHITE,
         );
     }
@@ -121,11 +128,11 @@ impl OverlayImpl for GForceMeter {
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
-        let res_scale = height / 720.0;
+        let res_scale = height / 1080.0;
         let center_x = el.x * width;
         let center_y = el.y * height;
 
-        let base_radius = 40.0 * el.scale * res_scale;
+        let base_radius = 60.0 * el.scale * res_scale;
 
         let mut paint_inner = Paint::default();
         paint_inner.set_color_rgba8(255, 255, 255, 128);
@@ -136,12 +143,12 @@ impl OverlayImpl for GForceMeter {
         paint_outer.anti_alias = true;
 
         let stroke_thin = Stroke {
-            width: 1.0 * el.scale * res_scale,
+            width: 1.5 * el.scale * res_scale,
             ..Default::default()
         };
 
         let stroke_thick = Stroke {
-            width: 2.0 * el.scale * res_scale,
+            width: 3.0 * el.scale * res_scale,
             ..Default::default()
         };
 
@@ -187,7 +194,7 @@ impl OverlayImpl for GForceMeter {
         paint_red.anti_alias = true;
 
         if let Some(path) =
-            PathBuilder::from_circle(center_x + dx, center_y + dy, 5.0 * el.scale * res_scale)
+            PathBuilder::from_circle(center_x + dx, center_y + dy, 7.5 * el.scale * res_scale)
         {
             pixmap.fill_path(
                 &path,
@@ -206,8 +213,8 @@ impl OverlayImpl for GForceMeter {
 
         // Position text above the outer circle (1.5x base radius) with some padding
         // Center of the text is used, so we subtract half the estimated text height
-        let text_scale = 20.0 * el.scale * res_scale;
-        let padding = 5.0 * el.scale * res_scale;
+        let text_scale = 30.0 * el.scale * res_scale;
+        let padding = 7.5 * el.scale * res_scale;
         let text_y = center_y - (base_radius * 1.5) - padding - (text_scale / 2.0);
 
         if let Some(font) = font_opt {
@@ -225,8 +232,8 @@ impl OverlayImpl for GForceMeter {
                 pixmap,
                 center_x,
                 text_y,
-                40.0 * el.scale * res_scale,
-                15.0 * el.scale * res_scale,
+                60.0 * el.scale * res_scale,
+                22.5 * el.scale * res_scale,
                 tiny_skia::Color::WHITE,
             );
         }

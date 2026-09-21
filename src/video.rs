@@ -30,66 +30,10 @@ pub struct VideoPlayer {
     duration_ms: Option<i64>,
     width: u32,
     height: u32,
-    rotation: f64,
 
     cmd_tx: Sender<PlayerCommand>,
     latest_frame: Arc<Mutex<Option<DecodedFrame>>>,
     error_state: Arc<Mutex<Option<String>>>,
-}
-
-pub fn get_video_rotation(path_str: &str) -> Option<f64> {
-    let output = Command::new("ffprobe")
-        .arg("-v")
-        .arg("quiet")
-        .arg("-select_streams")
-        .arg("v:0")
-        .arg("-show_streams")
-        .arg("-of")
-        .arg("json")
-        .arg("-i")
-        .arg(path_str)
-        .output()
-        .ok()?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout)
-        && let Some(streams) = json.get("streams").and_then(|s| s.as_array())
-        && let Some(stream) = streams.first()
-    {
-        // Check side_data_list for Display Matrix (used by GoPro and others)
-        if let Some(side_data) = stream.get("side_data_list").and_then(|s| s.as_array()) {
-            for item in side_data {
-                if item.get("side_data_type").and_then(|t| t.as_str()) == Some("Display Matrix")
-                    && let Some(rot) = item.get("rotation").and_then(|r| r.as_f64()).or_else(|| {
-                        item.get("rotation")
-                            .and_then(|r| r.as_i64())
-                            .map(|i| i as f64)
-                    })
-                {
-                    return Some(rot);
-                }
-            }
-        }
-
-        // Fallback to tags.rotate or tags.rotation
-        if let Some(tags) = stream.get("tags").and_then(|t| t.as_object()) {
-            if let Some(rot) = tags
-                .get("rotate")
-                .and_then(|r| r.as_str())
-                .and_then(|s| s.parse::<f64>().ok())
-            {
-                return Some(rot);
-            }
-            if let Some(rot) = tags
-                .get("rotation")
-                .and_then(|r| r.as_str())
-                .and_then(|s| s.parse::<f64>().ok())
-            {
-                return Some(rot);
-            }
-        }
-    }
-    None
 }
 
 impl Drop for VideoPlayer {
@@ -139,8 +83,6 @@ impl VideoPlayer {
         // First try the video stream tags, then fallback to the global format tags
         let creation_time_utc = fetch_time("stream_tags=creation_time")
             .or_else(|| fetch_time("format_tags=creation_time"));
-
-        let rotation = get_video_rotation(&path_str).unwrap_or(0.0);
 
         let input_ctx = ffmpeg::format::input(&path_str)?;
         let stream = input_ctx
@@ -261,7 +203,6 @@ impl VideoPlayer {
             duration_ms,
             width,
             height,
-            rotation,
             cmd_tx,
             latest_frame,
             error_state,
@@ -299,9 +240,5 @@ impl VideoPlayer {
 
     pub fn height(&self) -> u32 {
         self.height
-    }
-
-    pub fn rotation(&self) -> f64 {
-        self.rotation
     }
 }

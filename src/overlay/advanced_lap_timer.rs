@@ -12,6 +12,7 @@ struct UiDrawContext<'a> {
     painter: &'a egui::Painter,
     center: egui::Pos2,
     el: &'a OverlayElement,
+    res_scale: f32,
     y_offset: f32,
     line_height: f32,
 }
@@ -56,10 +57,10 @@ impl AdvancedLapTimer {
             egui::pos2(ctx.center.x, ctx.center.y + ctx.y_offset),
             egui::Align2::CENTER_CENTER,
             current_text,
-            egui::FontId::proportional(32.0 * ctx.el.scale),
+            egui::FontId::proportional(48.0 * ctx.el.scale * ctx.res_scale),
             egui::Color32::WHITE,
         );
-        ctx.y_offset += 36.0 * ctx.el.scale;
+        ctx.y_offset += 54.0 * ctx.el.scale * ctx.res_scale;
     }
 
     fn draw_ui_projection(ctx: &mut UiDrawContext, diff: i64) {
@@ -73,7 +74,7 @@ impl AdvancedLapTimer {
             egui::pos2(ctx.center.x, ctx.center.y + ctx.y_offset),
             egui::Align2::CENTER_CENTER,
             diff_text,
-            egui::FontId::proportional(24.0 * ctx.el.scale),
+            egui::FontId::proportional(36.0 * ctx.el.scale * ctx.res_scale),
             color,
         );
         ctx.y_offset += ctx.line_height;
@@ -89,7 +90,7 @@ impl AdvancedLapTimer {
             egui::pos2(ctx.center.x, ctx.center.y + ctx.y_offset),
             egui::Align2::CENTER_CENTER,
             best_text,
-            egui::FontId::proportional(16.0 * ctx.el.scale),
+            egui::FontId::proportional(24.0 * ctx.el.scale * ctx.res_scale),
             egui::Color32::from_rgb(255, 215, 0), // Gold
         );
         ctx.y_offset += ctx.line_height;
@@ -107,7 +108,7 @@ impl AdvancedLapTimer {
                 egui::pos2(ctx.center.x, ctx.center.y + ctx.y_offset),
                 egui::Align2::CENTER_CENTER,
                 lap_text,
-                egui::FontId::proportional(16.0 * ctx.el.scale),
+                egui::FontId::proportional(24.0 * ctx.el.scale * ctx.res_scale),
                 egui::Color32::from_white_alpha(alpha),
             );
             ctx.y_offset += ctx.line_height;
@@ -122,10 +123,10 @@ impl AdvancedLapTimer {
             &current_text,
             ctx.center_x,
             ctx.center_y + ctx.y_offset,
-            32.0 * ctx.el.scale * ctx.res_scale,
+            48.0 * ctx.el.scale * ctx.res_scale,
             Color::from_rgba8(255, 255, 255, 255),
         );
-        ctx.y_offset += 36.0 * ctx.el.scale * ctx.res_scale;
+        ctx.y_offset += 54.0 * ctx.el.scale * ctx.res_scale;
     }
 
     fn draw_skia_projection(ctx: &mut SkiaDrawContext, diff: i64) {
@@ -141,7 +142,7 @@ impl AdvancedLapTimer {
             &diff_text,
             ctx.center_x,
             ctx.center_y + ctx.y_offset,
-            24.0 * ctx.el.scale * ctx.res_scale,
+            36.0 * ctx.el.scale * ctx.res_scale,
             color,
         );
         ctx.y_offset += ctx.line_height;
@@ -159,7 +160,7 @@ impl AdvancedLapTimer {
             &best_text,
             ctx.center_x,
             ctx.center_y + ctx.y_offset,
-            16.0 * ctx.el.scale * ctx.res_scale,
+            24.0 * ctx.el.scale * ctx.res_scale,
             Color::from_rgba8(255, 215, 0, 255), // Gold
         );
         ctx.y_offset += ctx.line_height;
@@ -179,7 +180,7 @@ impl AdvancedLapTimer {
                 &lap_text,
                 ctx.center_x,
                 ctx.center_y + ctx.y_offset,
-                16.0 * ctx.el.scale * ctx.res_scale,
+                24.0 * ctx.el.scale * ctx.res_scale,
                 Color::from_rgba8(255, 255, 255, alpha),
             );
             ctx.y_offset += ctx.line_height;
@@ -201,13 +202,15 @@ impl OverlayImpl for AdvancedLapTimer {
             rect.left() + el.x * rect.width(),
             rect.top() + el.y * rect.height(),
         );
+        let res_scale = rect.height() / 1080.0;
 
         let mut ctx = UiDrawContext {
             painter: &painter,
             center,
             el,
+            res_scale,
             y_offset: 0.0,
-            line_height: 24.0 * el.scale,
+            line_height: 36.0 * el.scale * res_scale,
         };
 
         Self::draw_ui_current_time(&mut ctx, state);
@@ -233,7 +236,7 @@ impl OverlayImpl for AdvancedLapTimer {
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
-        let res_scale = height / 720.0;
+        let res_scale = height / 1080.0;
         let center_x = el.x * width;
         let center_y = el.y * height;
 
@@ -246,7 +249,7 @@ impl OverlayImpl for AdvancedLapTimer {
                 res_scale,
                 el,
                 y_offset: 0.0,
-                line_height: 24.0 * el.scale * res_scale,
+                line_height: 36.0 * el.scale * res_scale,
             };
 
             Self::draw_skia_current_time(&mut ctx, state);
@@ -265,8 +268,8 @@ impl OverlayImpl for AdvancedLapTimer {
                 pixmap,
                 center_x,
                 center_y,
-                100.0 * el.scale * res_scale,
-                20.0 * el.scale * res_scale,
+                150.0 * el.scale * res_scale,
+                30.0 * el.scale * res_scale,
                 Color::from_rgba8(255, 255, 0, 255),
             );
         }

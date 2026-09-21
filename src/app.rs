@@ -28,7 +28,6 @@ pub struct MyApp {
     pub trackmap: Option<TrackMap>,
     pub playhead_ms: i64,
     pub is_playing: bool,
-    pub original_video_rotation: f64,
     pub auto_sync_progress: Option<Arc<Mutex<Option<i64>>>>,
     pub export_progress: Option<String>,
     pub active_export_progress: Option<Arc<Mutex<crate::export::ExportProgress>>>,
@@ -71,7 +70,6 @@ impl MyApp {
             trackmap: None,
             playhead_ms: initial_playhead,
             is_playing: false,
-            original_video_rotation: 0.0,
             auto_sync_progress: None,
             export_progress: None,
             active_export_progress: None,
@@ -195,7 +193,6 @@ impl eframe::App for MyApp {
                             if let Some(dur) = player.duration_ms() {
                                 self.video_duration_ms = dur;
                             }
-                            self.original_video_rotation = player.rotation();
                             self.video_player = Some(player);
                             self.merge_progress = None;
                         }
