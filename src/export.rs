@@ -1,7 +1,7 @@
 #![allow(clippy::collapsible_if)]
-use crate::error::ExportError;
 use crate::project::ProjectConfig;
 use crate::telemetry::TelemetryLog;
+use anyhow::{Result, anyhow};
 use ffmpeg_next as ffmpeg;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -29,12 +29,12 @@ pub fn export_video(
     telemetry: &TelemetryLog,
     output_path: &Path,
     progress: Option<Arc<Mutex<ExportProgress>>>,
-) -> Result<(), ExportError> {
+) -> Result<()> {
     println!("Starting export for {:?}", config.video_path);
 
     let video_path = config.video_path.to_str().unwrap_or("").to_string();
     if video_path.is_empty() {
-        return Err(ExportError::NoVideoPath);
+        return Err(anyhow!("No video path specified for export"));
     }
 
     ffmpeg::init()?;
@@ -43,7 +43,7 @@ pub fn export_video(
     let input_stream = input_ctx
         .streams()
         .best(ffmpeg::media::Type::Video)
-        .ok_or(ExportError::NoVideoStream)?;
+        .ok_or_else(|| anyhow!("No video stream found"))?;
 
     let video_stream_index = input_stream.index();
     let decoder_ctx = ffmpeg::codec::context::Context::from_parameters(input_stream.parameters())?;
@@ -57,34 +57,67 @@ pub fn export_video(
     let temp_path = output_path.with_extension("temp.mp4");
     let mut output_ctx = ffmpeg::format::output(&temp_path)?;
 
-    let encoder = ffmpeg::encoder::find(ffmpeg::codec::Id::H264).ok_or(ExportError::NoEncoder)?;
+    let mut active_encoder = None;
+    let mut target_pix_fmt = ffmpeg::format::Pixel::YUV420P;
 
-    let mut output_stream = output_ctx.add_stream(encoder)?;
+    if config.use_hardware_acceleration {
+        let hw_encoders = ["h264_nvenc", "h264_amf", "h264_qsv", "h264_videotoolbox"];
+        for hw_name in hw_encoders.iter() {
+            if let Some(enc) = ffmpeg::encoder::find_by_name(hw_name) {
+                let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(enc);
+                let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
+                encoder_ctx_video.set_width(width);
+                encoder_ctx_video.set_height(height);
 
-    let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(encoder);
+                let pix_fmt = if *hw_name == "h264_qsv" {
+                    ffmpeg::format::Pixel::NV12
+                } else {
+                    ffmpeg::format::Pixel::YUV420P
+                };
 
-    let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
-    encoder_ctx_video.set_width(width);
-    encoder_ctx_video.set_height(height);
-    encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
-    encoder_ctx_video.set_time_base(time_base);
-    encoder_ctx_video.set_frame_rate(Some(frame_rate));
-    encoder_ctx_video.set_color_range(ffmpeg::util::color::Range::JPEG);
-    encoder_ctx_video.set_flags(ffmpeg::codec::flag::Flags::GLOBAL_HEADER);
+                encoder_ctx_video.set_format(pix_fmt);
+                encoder_ctx_video.set_time_base(time_base);
+                encoder_ctx_video.set_frame_rate(Some(frame_rate));
 
-    let mut opts = ffmpeg::Dictionary::new();
-    opts.set("preset", "medium");
-    opts.set("crf", "18");
-    let mut encoder = encoder_ctx_video.open_as_with(encoder, opts)?;
+                let opts = ffmpeg::Dictionary::new();
+                if let Ok(opened) = encoder_ctx_video.open_as_with(enc, opts) {
+                    println!("Successfully opened hardware encoder: {}", hw_name);
+                    active_encoder = Some((enc, opened));
+                    target_pix_fmt = pix_fmt;
+                    break;
+                } else {
+                    println!("Failed to open hardware encoder: {}", hw_name);
+                }
+            }
+        }
+    }
 
+    let (codec, mut encoder) = if let Some(opened_enc) = active_encoder {
+        opened_enc
+    } else {
+        println!("Using default software H264 encoder");
+        let enc = ffmpeg::encoder::find(ffmpeg::codec::Id::H264)
+            .ok_or_else(|| anyhow!("H264 encoder not found"))?;
+
+        let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(enc);
+        let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
+        encoder_ctx_video.set_width(width);
+        encoder_ctx_video.set_height(height);
+        encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
+        target_pix_fmt = ffmpeg::format::Pixel::YUV420P;
+        encoder_ctx_video.set_time_base(time_base);
+        encoder_ctx_video.set_frame_rate(Some(frame_rate));
+
+        let mut opts = ffmpeg::Dictionary::new();
+        opts.set("preset", "medium");
+        let opened = encoder_ctx_video.open_as_with(enc, opts)?;
+        (enc, opened)
+    };
+
+    let mut output_stream = output_ctx.add_stream(codec)?;
     output_stream.set_parameters(&encoder);
 
     output_ctx.write_header()?;
-
-    let output_time_base = output_ctx
-        .stream(0)
-        .ok_or(ExportError::NoOutputStream)?
-        .time_base();
 
     let mut scaler_to_rgba = ffmpeg::software::scaling::Context::get(
         decoder.format(),
@@ -100,7 +133,7 @@ pub fn export_video(
         ffmpeg::format::Pixel::RGBA,
         width,
         height,
-        ffmpeg::format::Pixel::YUV420P,
+        target_pix_fmt,
         width,
         height,
         ffmpeg::software::scaling::flag::Flags::FAST_BILINEAR,
@@ -109,6 +142,7 @@ pub fn export_video(
     let mut decoded = ffmpeg::frame::Video::empty();
     let mut rgba_frame = ffmpeg::frame::Video::empty();
     let mut yuv_frame = ffmpeg::frame::Video::empty();
+    yuv_frame.set_format(target_pix_fmt);
 
     // Create telemetry view to handle bounding and laps cleanly
     let telemetry_view = crate::telemetry::TelemetryView::new(
@@ -187,16 +221,6 @@ pub fn export_video(
     let mut first_pts: Option<i64> = None;
     let mut packed_data = Vec::new();
 
-    // Fetch video rotation once
-    let original_video_rotation = crate::video::get_video_rotation(&video_path).unwrap_or(0.0);
-
-    let mut flip_h = config.flip_horizontal;
-    let mut flip_v = config.flip_vertical;
-    if (original_video_rotation.abs() - 180.0).abs() < 0.1 {
-        flip_h = !flip_h;
-        flip_v = !flip_v;
-    }
-
     for (stream, packet) in input_ctx.packets() {
         if finished {
             break;
@@ -251,12 +275,16 @@ pub fn export_video(
 
                 packed_data.resize((w * h * 4) as usize, 0);
                 for y in 0..h as usize {
-                    let src_y = if flip_v { (h as usize - 1) - y } else { y };
+                    let src_y = if config.flip_vertical {
+                        (h as usize - 1) - y
+                    } else {
+                        y
+                    };
 
                     let src_start = src_y * stride;
                     let dst_start = y * (w * 4) as usize;
 
-                    if flip_h {
+                    if config.flip_horizontal {
                         for x in 0..w as usize {
                             let src_x = (w as usize - 1) - x;
                             let src_idx = src_start + src_x * 4;
@@ -303,7 +331,7 @@ pub fn export_video(
                 let mut encoded = ffmpeg::Packet::empty();
                 while encoder.receive_packet(&mut encoded).is_ok() {
                     encoded.set_stream(0);
-                    encoded.rescale_ts(time_base, output_time_base);
+                    encoded.rescale_ts(time_base, output_ctx.stream(0).unwrap().time_base());
                     encoded.write_interleaved(&mut output_ctx)?;
                 }
             }
@@ -329,23 +357,10 @@ pub fn export_video(
 
         packed_data.resize((w * h * 4) as usize, 0);
         for y in 0..h as usize {
-            let src_y = if flip_v { (h as usize - 1) - y } else { y };
-
-            let src_start = src_y * stride;
+            let src_start = y * stride;
             let dst_start = y * (w * 4) as usize;
-
-            if flip_h {
-                for x in 0..w as usize {
-                    let src_x = (w as usize - 1) - x;
-                    let src_idx = src_start + src_x * 4;
-                    let dst_idx = dst_start + x * 4;
-                    packed_data[dst_idx..dst_idx + 4]
-                        .copy_from_slice(&raw_data[src_idx..src_idx + 4]);
-                }
-            } else {
-                packed_data[dst_start..dst_start + (w * 4) as usize]
-                    .copy_from_slice(&raw_data[src_start..src_start + (w * 4) as usize]);
-            }
+            packed_data[dst_start..dst_start + (w * 4) as usize]
+                .copy_from_slice(&raw_data[src_start..src_start + (w * 4) as usize]);
         }
 
         if let Some(mut pixmap) = tiny_skia::PixmapMut::from_bytes(&mut packed_data, w, h) {
@@ -380,7 +395,7 @@ pub fn export_video(
         let mut encoded = ffmpeg::Packet::empty();
         while encoder.receive_packet(&mut encoded).is_ok() {
             encoded.set_stream(0);
-            encoded.rescale_ts(time_base, output_time_base);
+            encoded.rescale_ts(time_base, output_ctx.stream(0).unwrap().time_base());
             encoded.write_interleaved(&mut output_ctx)?;
         }
     }
@@ -389,7 +404,7 @@ pub fn export_video(
     let mut encoded = ffmpeg::Packet::empty();
     while encoder.receive_packet(&mut encoded).is_ok() {
         encoded.set_stream(0);
-        encoded.rescale_ts(time_base, output_time_base);
+        encoded.rescale_ts(time_base, output_ctx.stream(0).unwrap().time_base());
         encoded.write_interleaved(&mut output_ctx)?;
     }
 

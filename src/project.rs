@@ -44,6 +44,10 @@ pub struct SyncState {
     pub max_auto_sync_offset_ms: i64,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProjectConfig {
     pub video_path: PathBuf,
@@ -52,6 +56,8 @@ pub struct ProjectConfig {
     pub elements: Vec<OverlayElement>,
     pub flip_vertical: bool,
     pub flip_horizontal: bool,
+    #[serde(default = "default_true")]
+    pub use_hardware_acceleration: bool,
     #[serde(default)]
     pub export_start_ms: Option<i64>,
     #[serde(default)]
@@ -61,16 +67,13 @@ pub struct ProjectConfig {
 }
 
 impl ProjectConfig {
-    pub fn save<P: AsRef<std::path::Path>>(
-        &self,
-        path: P,
-    ) -> Result<(), crate::error::ConfigError> {
+    pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(self)?;
         std::fs::write(path, json)?;
         Ok(())
     }
 
-    pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self, crate::error::ConfigError> {
+    pub fn load<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Self> {
         let json = std::fs::read_to_string(path)?;
         let config = serde_json::from_str(&json)?;
         Ok(config)
