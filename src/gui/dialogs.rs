@@ -55,7 +55,7 @@ fn handle_pick_config_load(app: &mut MyApp, ctx: &egui::Context, path_buf: PathB
         }
         Err(e) => {
             log::error!("Failed to load config: {}", e);
-            app.global_error = Some(crate::error::AppError::Config(e));
+            app.global_error = Some(crate::error::AppError::Unknown(e.to_string()));
         }
     }
 }
@@ -63,7 +63,7 @@ fn handle_pick_config_load(app: &mut MyApp, ctx: &egui::Context, path_buf: PathB
 fn handle_pick_config_save(app: &mut MyApp, path_buf: PathBuf) {
     if let Err(e) = app.config.save(&path_buf) {
         log::error!("Failed to save config: {}", e);
-        app.global_error = Some(crate::error::AppError::Config(e));
+        app.global_error = Some(crate::error::AppError::Unknown(e.to_string()));
     }
 }
 
@@ -111,7 +111,9 @@ fn handle_pick_export_output(app: &mut MyApp, path_buf: PathBuf) {
             &path_clone,
             Some(progress_arc),
         );
-        let _ = tx.send(res);
+        let _ = tx.send(res.map_err(|e| {
+            crate::error::ExportError::Io(std::io::Error::other(e.to_string()))
+        }));
     });
     app.export_progress = Some("Exporting in background...".to_string());
 }

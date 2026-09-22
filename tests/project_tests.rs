@@ -14,6 +14,7 @@ fn test_custom_config_serialization() {
         },
         flip_vertical: true,
         flip_horizontal: false,
+        use_hardware_acceleration: true,
         elements: vec![
             OverlayElement {
                 enabled: true,
@@ -60,6 +61,7 @@ fn test_config_save_and_load() {
         },
         flip_vertical: false,
         flip_horizontal: true,
+        use_hardware_acceleration: true,
         elements: vec![OverlayElement {
             enabled: true,
             kind: OverlayKind::TrackMap,

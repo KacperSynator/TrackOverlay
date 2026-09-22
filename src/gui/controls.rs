@@ -10,25 +10,11 @@ use crate::sync::auto_correlate_gps;
 use crate::telemetry::TelemetryLog;
 
 fn render_load_video(app: &mut MyApp, ui: &mut egui::Ui) {
-    let is_merging = app.merge_progress.is_some();
-
     ui.horizontal(|ui| {
-        ui.add_enabled_ui(!is_merging, |ui| {
-            if ui.button("Load Video").clicked() {
-                app.dialog_mode = DialogMode::PickVideo;
-                app.file_dialog.pick_file();
-            }
-
-            let has_video = app.config.video_path.exists() && app.config.video_path.is_file();
-
-            ui.add_enabled_ui(has_video, |ui| {
-                if ui.button("Append Video").clicked() {
-                    app.dialog_mode = DialogMode::AppendVideo;
-                    app.file_dialog.pick_file();
-                }
-            });
-        });
-
+        if ui.button("Load Video").clicked() {
+            app.dialog_mode = DialogMode::PickVideo;
+            app.file_dialog.pick_file();
+        }
         ui.label(
             app.config
                 .video_path
@@ -46,20 +32,6 @@ fn render_load_video(app: &mut MyApp, ui: &mut egui::Ui) {
             ));
         }
         ui.label(format!("  Duration: {}s", app.video_duration_ms / 1000));
-    }
-
-    if app.original_video_rotation.abs() > 0.1 {
-        ui.label(
-            egui::RichText::new(format!(
-                "Original Video Rotation: {}° (export will automatically correct this)",
-                app.original_video_rotation
-            ))
-            .color(egui::Color32::YELLOW),
-        );
-    }
-
-    if let Some(msg) = &app.merge_progress {
-        ui.label(msg);
     }
 }
 
@@ -85,8 +57,9 @@ fn render_load_telemetry(app: &mut MyApp, ui: &mut egui::Ui) {
                 dt.format("%Y-%m-%d %H:%M:%S UTC")
             ));
         }
-        if let (Some(first), Some(last)) = (telem.samples.first(), telem.samples.last()) {
-            let telem_dur = last.time_ms - first.time_ms;
+        if !telem.samples.is_empty() {
+            let telem_dur =
+                telem.samples.last().unwrap().time_ms - telem.samples.first().unwrap().time_ms;
             ui.label(format!("  Data Length: {}s", telem_dur / 1000));
         }
 
@@ -113,23 +86,16 @@ fn render_project_files_section(app: &mut MyApp, ui: &mut egui::Ui) {
     render_load_video(app, ui);
     ui.add_space(10.0);
     render_load_telemetry(app, ui);
-    ui.add_space(10.0);
-    ui.horizontal(|ui| {
-        if ui.button("Load Config").clicked() {
-            app.dialog_mode = DialogMode::PickConfigLoad;
-            app.file_dialog.pick_file();
-        }
-        if ui.button("Save Config").clicked() {
-            app.dialog_mode = DialogMode::PickConfigSave;
-            app.file_dialog.save_file();
-        }
-    });
 }
 
 fn render_settings_section(app: &mut MyApp, ui: &mut egui::Ui) {
     ui.heading("Settings");
     ui.checkbox(&mut app.config.flip_vertical, "Flip Video Vertically");
     ui.checkbox(&mut app.config.flip_horizontal, "Flip Video Horizontally");
+    ui.checkbox(
+        &mut app.config.use_hardware_acceleration,
+        "Use Hardware Acceleration (if available)",
+    );
 
     let mut speed_source = app.config.speed_source.clone();
     let mut changed = false;
@@ -354,8 +320,7 @@ fn render_auto_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
         }
     } else {
         let mut done = false;
-        if let Some(progress) = app.auto_sync_progress.as_ref()
-            && let Ok(lock) = progress.lock()
+        if let Ok(lock) = app.auto_sync_progress.as_ref().unwrap().lock()
             && let Some(offset) = *lock
         {
             app.config.sync.offset_ms = offset;
