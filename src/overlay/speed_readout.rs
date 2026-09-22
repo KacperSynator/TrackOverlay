@@ -22,12 +22,13 @@ impl OverlayImpl for SpeedReadout {
             rect.top() + el.y * rect.height(),
         );
 
+        let res_scale = rect.height() / 1080.0;
         let text = common::get_speed_text(state.current_sample.as_ref());
         painter.text(
             center,
             egui::Align2::CENTER_CENTER,
             text,
-            egui::FontId::proportional(32.0 * el.scale),
+            egui::FontId::proportional(48.0 * el.scale * res_scale),
             egui::Color32::WHITE,
         );
     }
@@ -42,7 +43,7 @@ impl OverlayImpl for SpeedReadout {
     ) {
         let width = pixmap.width() as f32;
         let height = pixmap.height() as f32;
-        let res_scale = height / 720.0;
+        let res_scale = height / 1080.0;
         let center_x = el.x * width;
         let center_y = el.y * height;
 
@@ -54,7 +55,7 @@ impl OverlayImpl for SpeedReadout {
                 &text,
                 center_x,
                 center_y,
-                32.0 * el.scale * res_scale,
+                48.0 * el.scale * res_scale,
                 Color::WHITE,
             );
         } else {
@@ -62,8 +63,8 @@ impl OverlayImpl for SpeedReadout {
                 pixmap,
                 center_x,
                 center_y,
-                100.0 * el.scale * res_scale,
-                30.0 * el.scale * res_scale,
+                150.0 * el.scale * res_scale,
+                45.0 * el.scale * res_scale,
                 Color::WHITE,
             );
         }
