@@ -479,29 +479,25 @@ fn compute_telemetry_state(
         if !best_lap_samples.is_empty() {
             let target_dist = sample.lap_distance_m;
 
-            let mut best_lap_elapsed = 0; // Fix unused_assignments check
-            let _ = best_lap_elapsed;
-            match best_lap_samples.binary_search_by(|s| {
+            let best_lap_elapsed = match best_lap_samples.binary_search_by(|s| {
                 s.lap_distance_m
                     .partial_cmp(&target_dist)
                     .unwrap_or(std::cmp::Ordering::Equal)
             }) {
-                Ok(idx) => {
-                    best_lap_elapsed = best_lap_samples[idx].time_ms - start_time;
-                }
+                Ok(idx) => best_lap_samples[idx].time_ms - start_time,
                 Err(idx) => {
                     if idx == 0 {
-                        best_lap_elapsed = best_lap_samples
+                        best_lap_samples
                             .first()
                             .map(|s| s.time_ms)
                             .unwrap_or(start_time)
-                            - start_time;
+                            - start_time
                     } else if idx >= best_lap_samples.len() {
-                        best_lap_elapsed = best_lap_samples
+                        best_lap_samples
                             .last()
                             .map(|s| s.time_ms)
                             .unwrap_or(start_time)
-                            - start_time;
+                            - start_time
                     } else {
                         let s1 = best_lap_samples[idx - 1];
                         let s2 = best_lap_samples[idx];
@@ -515,10 +511,10 @@ fn compute_telemetry_state(
 
                         let time_at_dist =
                             s1.time_ms + ((s2.time_ms - s1.time_ms) as f64 * t) as i64;
-                        best_lap_elapsed = time_at_dist - start_time;
+                        time_at_dist - start_time
                     }
                 }
-            }
+            };
 
             let current_elapsed = sample.lap_time_ms.unwrap_or(0);
             projection_ms = Some(current_elapsed - best_lap_elapsed);
