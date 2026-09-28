@@ -99,6 +99,7 @@ fn handle_pick_export_output(app: &mut MyApp, path_buf: PathBuf) {
     };
 
     app.export_progress = Some(format!("Exporting to {:?}...", path_buf));
+    app.export_result = None;
 
     let progress_arc = Arc::new(Mutex::new(crate::export::ExportProgress::default()));
     app.active_export_progress = Some(progress_arc.clone());

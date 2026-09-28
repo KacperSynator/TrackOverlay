@@ -31,7 +31,7 @@ pub fn export_video(
     telemetry: &TelemetryLog,
     output_path: &Path,
     progress: Option<Arc<Mutex<ExportProgress>>>,
-) -> Result<(), ExportError> {
+) -> Result<ExportProgress, ExportError> {
     println!("Starting export for {:?}", config.video_path);
 
     let video_path = config.video_path.to_str().unwrap_or("").to_string();
@@ -497,5 +497,15 @@ pub fn export_video(
     }
     let _ = std::fs::remove_file(&temp_path);
 
-    Ok(())
+    let final_progress = if let Some(p) = progress {
+        if let Ok(lock) = p.lock() {
+            lock.clone()
+        } else {
+            ExportProgress::default()
+        }
+    } else {
+        ExportProgress::default()
+    };
+
+    Ok(final_progress)
 }
