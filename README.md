@@ -55,7 +55,11 @@ Currently, in GUI mode, you can:
 4. Tweak the layout gauges
 5. Click **"Export Final Video"** to export the result.
 
-## Exporting via CLI
+## Exporting
+
+Video exporting automatically attempts to use hardware-accelerated H.264 encoding via `ffmpeg` if your system supports it. It probes for AMD (`h264_amf`), Nvidia (`h264_nvenc`), and Intel (`h264_qsv`) encoders before gracefully falling back to CPU software encoding (`libx264`). The active encoder is displayed in the UI during the export process.
+
+### Exporting via CLI
 
 If you've already configured your project (e.g. by saving it in the GUI or crafting it manually), you can run the batch export pipeline by providing an export flag and destination via the CLI interface.
 
