@@ -298,6 +298,10 @@ fn render_export_progress(app: &MyApp, ui: &mut egui::Ui) {
             );
 
             ui.label(format!("Elapsed: {} | ETA: {}", elapsed_str, eta_str));
+
+            if let Some(encoder) = &lock.encoder_name {
+                ui.label(format!("Encoder: {}", encoder));
+            }
         }
     } else if let Some(msg) = &app.export_progress {
         ui.label(msg);
