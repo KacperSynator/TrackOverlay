@@ -63,8 +63,8 @@ impl MyApp {
         let (merge_tx, merge_rx) = crossbeam_channel::unbounded();
         let mut fd = FileDialog::new().default_size([600.0, 400.0]);
 
-        if let Some(ref dir) = data_dir {
-            fd = fd.initial_directory(dir.clone());
+        if let Some(dir) = data_dir {
+            fd = fd.initial_directory(dir);
         }
 
         let initial_playhead = config.export_start_ms.unwrap_or(0);
