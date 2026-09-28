@@ -12,6 +12,7 @@ pub struct ExportProgress {
     pub frames_done: usize,
     pub total_frames: usize,
     pub start_time: Option<Instant>,
+    pub encoder_name: Option<String>,
 }
 
 impl Default for ExportProgress {
@@ -20,6 +21,7 @@ impl Default for ExportProgress {
             frames_done: 0,
             total_frames: 0,
             start_time: Some(Instant::now()),
+            encoder_name: None,
         }
     }
 }
@@ -57,27 +59,83 @@ pub fn export_video(
     let temp_path = output_path.with_extension("temp.mp4");
     let mut output_ctx = ffmpeg::format::output(&temp_path)?;
 
-    let encoder = ffmpeg::encoder::find(ffmpeg::codec::Id::H264).ok_or(ExportError::NoEncoder)?;
+    let hardware_encoders = vec![
+        ("h264_amf", ffmpeg::format::Pixel::YUV420P),
+        ("h264_nvenc", ffmpeg::format::Pixel::YUV420P),
+        ("h264_qsv", ffmpeg::format::Pixel::NV12),
+        // Add more if needed, software fallback will be used if none of these work
+    ];
 
-    let mut output_stream = output_ctx.add_stream(encoder)?;
+    let mut selected_encoder_ctx: Option<ffmpeg::encoder::Video> = None;
+    let mut selected_encoder_name: Option<String> = None;
+    let mut selected_pix_fmt = ffmpeg::format::Pixel::YUV420P; // default
+    let mut output_stream = output_ctx.add_stream(
+        ffmpeg::encoder::find(ffmpeg::codec::Id::H264).ok_or(ExportError::NoEncoder)?,
+    )?;
 
-    let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(encoder);
+    // First try hardware encoders
+    for (name, pix_fmt) in hardware_encoders {
+        if let Some(codec) = ffmpeg::encoder::find_by_name(name) {
+            let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(codec);
+            if let Ok(mut encoder_ctx_video) = encoder_ctx.encoder().video() {
+                encoder_ctx_video.set_width(width);
+                encoder_ctx_video.set_height(height);
+                encoder_ctx_video.set_format(pix_fmt);
+                encoder_ctx_video.set_time_base(time_base);
+                encoder_ctx_video.set_frame_rate(Some(frame_rate));
+                encoder_ctx_video.set_color_range(ffmpeg::util::color::Range::JPEG);
+                encoder_ctx_video.set_flags(ffmpeg::codec::flag::Flags::GLOBAL_HEADER);
 
-    let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
-    encoder_ctx_video.set_width(width);
-    encoder_ctx_video.set_height(height);
-    encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
-    encoder_ctx_video.set_time_base(time_base);
-    encoder_ctx_video.set_frame_rate(Some(frame_rate));
-    encoder_ctx_video.set_color_range(ffmpeg::util::color::Range::JPEG);
-    encoder_ctx_video.set_flags(ffmpeg::codec::flag::Flags::GLOBAL_HEADER);
+                let mut opts = ffmpeg::Dictionary::new();
+                opts.set("crf", "18");
+                // Do not set preset="medium" for hardware encoders as it causes crashes (e.g. AMF)
 
-    let mut opts = ffmpeg::Dictionary::new();
-    opts.set("preset", "medium");
-    opts.set("crf", "18");
-    let mut encoder = encoder_ctx_video.open_as_with(encoder, opts)?;
+                if let Ok(opened_encoder) = encoder_ctx_video.open_as_with(codec, opts) {
+                    println!("Successfully initialized hardware encoder: {}", name);
+                    output_stream.set_parameters(&opened_encoder);
+                    selected_encoder_ctx = Some(opened_encoder);
+                    selected_encoder_name = Some(name.to_string());
+                    selected_pix_fmt = pix_fmt;
+                    break;
+                }
+            }
+        }
+    }
 
-    output_stream.set_parameters(&encoder);
+    // Fallback to software encoder if no hardware encoder was found/opened
+    if selected_encoder_ctx.is_none() {
+        let sw_codec =
+            ffmpeg::encoder::find(ffmpeg::codec::Id::H264).ok_or(ExportError::NoEncoder)?;
+        let encoder_ctx = ffmpeg::codec::context::Context::new_with_codec(sw_codec);
+        let mut encoder_ctx_video = encoder_ctx.encoder().video()?;
+
+        encoder_ctx_video.set_width(width);
+        encoder_ctx_video.set_height(height);
+        encoder_ctx_video.set_format(ffmpeg::format::Pixel::YUV420P);
+        encoder_ctx_video.set_time_base(time_base);
+        encoder_ctx_video.set_frame_rate(Some(frame_rate));
+        encoder_ctx_video.set_color_range(ffmpeg::util::color::Range::JPEG);
+        encoder_ctx_video.set_flags(ffmpeg::codec::flag::Flags::GLOBAL_HEADER);
+
+        let mut opts = ffmpeg::Dictionary::new();
+        opts.set("preset", "medium");
+        opts.set("crf", "18");
+
+        let opened_encoder = encoder_ctx_video.open_as_with(sw_codec, opts)?;
+        println!("Successfully initialized software encoder (libx264)");
+        output_stream.set_parameters(&opened_encoder);
+        selected_encoder_ctx = Some(opened_encoder);
+        selected_encoder_name = Some("libx264 (Software)".to_string());
+        selected_pix_fmt = ffmpeg::format::Pixel::YUV420P;
+    }
+
+    let mut encoder = selected_encoder_ctx.unwrap();
+
+    if let Some(p) = &progress {
+        if let Ok(mut lock) = p.lock() {
+            lock.encoder_name = selected_encoder_name;
+        }
+    }
 
     output_ctx.write_header()?;
 
@@ -100,7 +158,7 @@ pub fn export_video(
         ffmpeg::format::Pixel::RGBA,
         width,
         height,
-        ffmpeg::format::Pixel::YUV420P,
+        selected_pix_fmt,
         width,
         height,
         ffmpeg::software::scaling::flag::Flags::FAST_BILINEAR,
