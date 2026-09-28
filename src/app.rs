@@ -32,8 +32,12 @@ pub struct MyApp {
     pub auto_sync_progress: Option<Arc<Mutex<Option<i64>>>>,
     pub export_progress: Option<String>,
     pub active_export_progress: Option<Arc<Mutex<crate::export::ExportProgress>>>,
-    pub export_rx: crossbeam_channel::Receiver<Result<(), crate::error::ExportError>>,
-    pub export_tx: crossbeam_channel::Sender<Result<(), crate::error::ExportError>>,
+    pub export_result: Option<Result<String, String>>,
+    pub export_rx: crossbeam_channel::Receiver<
+        Result<crate::export::ExportProgress, crate::error::ExportError>,
+    >,
+    pub export_tx:
+        crossbeam_channel::Sender<Result<crate::export::ExportProgress, crate::error::ExportError>>,
     pub export_start_was_active: bool,
     pub export_end_was_active: bool,
 
@@ -75,6 +79,7 @@ impl MyApp {
             auto_sync_progress: None,
             export_progress: None,
             active_export_progress: None,
+            export_result: None,
             export_rx: rx,
             export_tx: tx,
             export_start_was_active: false,
@@ -216,10 +221,36 @@ impl eframe::App for MyApp {
         if let Ok(res) = self.export_rx.try_recv() {
             self.active_export_progress = None;
             match res {
-                Ok(_) => self.export_progress = Some("Export completed successfully.".to_string()),
+                Ok(progress) => {
+                    self.export_progress = Some("Export completed successfully.".to_string());
+                    let elapsed_s = progress
+                        .start_time
+                        .map_or(0.0, |t| t.elapsed().as_secs_f32());
+                    let fps = if elapsed_s > 0.0 {
+                        progress.frames_done as f32 / elapsed_s
+                    } else {
+                        0.0
+                    };
+                    let encoder = progress
+                        .encoder_name
+                        .unwrap_or_else(|| "Unknown".to_string());
+
+                    let elapsed_str = format!(
+                        "{:02}:{:02}",
+                        (elapsed_s / 60.0).floor(),
+                        (elapsed_s % 60.0).floor()
+                    );
+
+                    let stats = format!(
+                        "Frames exported: {}\nAvg FPS: {:.1}\nTime taken: {}\nEncoder used: {}",
+                        progress.frames_done, fps, elapsed_str, encoder
+                    );
+                    self.export_result = Some(Ok(stats));
+                }
                 Err(e) => {
                     self.global_error = Some(crate::error::AppError::Export(e));
                     self.export_progress = Some("Export failed.".to_string());
+                    self.export_result = Some(Err("Export failed.".to_string()));
                 }
             }
         }

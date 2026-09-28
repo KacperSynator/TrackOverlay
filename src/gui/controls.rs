@@ -304,7 +304,19 @@ fn render_export_progress(app: &MyApp, ui: &mut egui::Ui) {
             }
         }
     } else if let Some(msg) = &app.export_progress {
-        ui.label(msg);
+        if let Some(res) = &app.export_result {
+            match res {
+                Ok(stats) => {
+                    ui.label(egui::RichText::new(msg).color(egui::Color32::GREEN));
+                    ui.label(stats);
+                }
+                Err(err) => {
+                    ui.label(egui::RichText::new(err).color(egui::Color32::RED));
+                }
+            }
+        } else {
+            ui.label(msg);
+        }
     }
 }
 
