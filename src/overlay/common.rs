@@ -131,6 +131,11 @@ pub fn draw_text(
 }
 
 #[cfg(test)]
+pub fn create_test_pixmap() -> tiny_skia::Pixmap {
+    tiny_skia::Pixmap::new(800, 600).unwrap()
+}
+
+#[cfg(test)]
 pub fn create_test_sample() -> TelemetrySample {
     TelemetrySample {
         time_ms: 1000,

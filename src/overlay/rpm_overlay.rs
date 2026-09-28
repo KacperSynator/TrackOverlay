@@ -811,8 +811,8 @@ mod tests {
         let styles = ["bar", "dial", "leds"];
         for style in styles {
             let el = create_test_element(style);
-            let mut data = vec![0; 800 * 600 * 4];
-            let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
+            let mut pixmap_owner = crate::overlay::common::create_test_pixmap();
+            let mut pixmap = pixmap_owner.as_mut();
 
             let overlay = RpmOverlay;
 

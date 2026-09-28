@@ -216,8 +216,8 @@ mod tests {
     #[test]
     fn test_track_map_render_skia() {
         let el = create_test_element();
-        let mut data = vec![0; 800 * 600 * 4];
-        let mut pixmap = PixmapMut::from_bytes(&mut data, 800, 600).unwrap();
+        let mut pixmap_owner = crate::overlay::common::create_test_pixmap();
+        let mut pixmap = pixmap_owner.as_mut();
 
         let map = create_track_map();
         let trackmap_overlay = TrackMapOverlay;
