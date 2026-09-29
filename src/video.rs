@@ -6,7 +6,6 @@ use log::error;
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::path::Path;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -38,18 +37,7 @@ pub struct VideoPlayer {
 }
 
 pub fn get_video_rotation(path_str: &str) -> Option<f64> {
-    let output = Command::new("ffprobe")
-        .arg("-v")
-        .arg("quiet")
-        .arg("-select_streams")
-        .arg("v:0")
-        .arg("-show_streams")
-        .arg("-of")
-        .arg("json")
-        .arg("-i")
-        .arg(path_str)
-        .output()
-        .ok()?;
+    let output = crate::ff_commands::ffprobe_get_video_rotation(path_str).ok()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout)
@@ -108,20 +96,7 @@ impl VideoPlayer {
 
         // Helper function to run ffprobe and parse the date
         let fetch_time = |entries: &str| -> Option<DateTime<Utc>> {
-            if let Ok(output) = Command::new("ffprobe")
-                .args([
-                    "-v",
-                    "quiet",
-                    "-select_streams",
-                    "v:0",
-                    "-show_entries",
-                    entries,
-                    "-of",
-                    "default=noprint_wrappers=1:nokey=1",
-                    "-i",
-                    &path_str,
-                ])
-                .output()
+            if let Ok(output) = crate::ff_commands::ffprobe_get_metadata_entries(&path_str, entries)
             {
                 let stdout_str = String::from_utf8_lossy(&output.stdout);
                 for line in stdout_str.lines() {
