@@ -4,7 +4,7 @@ use track_overlay::telemetry::TelemetryLog;
 
 #[test]
 fn test_telemetry_parsing_and_interpolation() {
-    let mut file = NamedTempFile::new().unwrap();
+    let mut file = NamedTempFile::new().expect("Failed to create temporary file for test");
     let csv_content = r#"# RaceRender Data: TrackAddict 4.8.2 on Android 14 [samsung SM-S928B] (Mode: 0)
 # Vehicle: Hyundai
 # Vehicle Tune: OSID's: OSMQKM_O_T0B, CVN's: 5081166E
@@ -18,10 +18,11 @@ fn test_telemetry_parsing_and_interpolation() {
 0.000,1727597624.000,0,0,0,1,0.000,53.0229789,18.5481845,76.3,250,26.5,116.9,3.8,-0.30,0.30,-0.17,0,101.91,-48.7,1,4162.000,36.000,27.059,90.000,34.000,78.000
 0.100,1727597624.100,0,0,0,0,0.000,53.0229789,18.5481845,76.3,250,27.5,116.9,3.8,-0.32,0.30,-0.20,0,101.91,-48.7,0,4162.000,36.000,27.059,90.000,34.000,78.000
 "#;
-    file.write_all(csv_content.as_bytes()).unwrap();
+    file.write_all(csv_content.as_bytes())
+        .expect("Failed to load or write CSV file");
 
-    let log =
-        TelemetryLog::load_csv(file.path(), track_overlay::project::SpeedSource::Auto).unwrap();
+    let log = TelemetryLog::load_csv(file.path(), track_overlay::project::SpeedSource::Auto)
+        .expect("Failed to load or write CSV file");
     assert_eq!(log.samples.len(), 2);
 
     let s1 = &log.samples[0];
@@ -36,19 +37,25 @@ fn test_telemetry_parsing_and_interpolation() {
     assert_eq!(s2.lap_time_ms, Some(100));
 
     // Test interpolation
-    let interp = log.sample_at(50).unwrap();
+    let interp = log
+        .sample_at(50)
+        .expect("Failed to interpolate sample at 50ms");
     assert_eq!(interp.time_ms, 50);
     assert_eq!(interp.speed_kph, 27.0);
     assert_eq!(interp.lap_time_ms, Some(50));
 
     // Test out of bounds (before start)
-    let early = log.sample_at(-1000).unwrap();
+    let early = log
+        .sample_at(-1000)
+        .expect("Failed to get early out of bounds sample");
     assert_eq!(early.time_ms, 0);
     assert_eq!(early.speed_kph, 26.5);
     assert_eq!(early.lap_time_ms, Some(0));
 
     // Test out of bounds (after end)
-    let late = log.sample_at(10000).unwrap();
+    let late = log
+        .sample_at(10000)
+        .expect("Failed to get late out of bounds sample");
     assert_eq!(late.time_ms, 100);
     assert_eq!(late.speed_kph, 27.5);
     assert_eq!(late.lap_time_ms, Some(100));
@@ -58,7 +65,7 @@ fn test_telemetry_parsing_and_interpolation() {
 fn test_telemetry_view_truncation_and_laps() {
     use track_overlay::telemetry::TelemetryView;
 
-    let mut file = NamedTempFile::new().unwrap();
+    let mut file = NamedTempFile::new().expect("Failed to create temporary file for test");
     let csv_content = r#"# Dummy Header
 "Time","UTC Time","Lap","Predicted Lap Time","Predicted vs Best Lap","GPS_Update","GPS_Delay","Latitude","Longitude","Altitude (m)","Altitude (ft)","Speed (Km/h)","Heading","Accuracy (m)","Accel X","Accel Y","Accel Z","Brake (calculated)","Barometric Pressure (kPa)","Pressure Altitude (m)","OBD_Update","Engine Speed (RPM) *OBD","Vehicle Speed (km/h) *OBD","Throttle Position (%) *OBD","Engine Coolant Temp (C) *OBD","Intake Air Temp (C) *OBD","Intake Manifold Pressure (kPa) *OBD"
 0.000,1000.000,0,0,0,1,0.0,50.0,20.0,0,0,10.0,0,0,0,0,0,0,100.0,0,1,1000,10,10,90,30,100
@@ -68,9 +75,10 @@ fn test_telemetry_view_truncation_and_laps() {
 4.000,1004.000,2,0,0,1,0.0,50.0,20.0,0,0,50.0,0,0,0,0,0,0,100.0,0,1,1000,10,10,90,30,100
 5.000,1005.000,2,0,0,1,0.0,50.0,20.0,0,0,60.0,0,0,0,0,0,0,100.0,0,1,1000,10,10,90,30,100
 "#;
-    file.write_all(csv_content.as_bytes()).unwrap();
-    let log =
-        TelemetryLog::load_csv(file.path(), track_overlay::project::SpeedSource::Auto).unwrap();
+    file.write_all(csv_content.as_bytes())
+        .expect("Failed to load or write CSV file");
+    let log = TelemetryLog::load_csv(file.path(), track_overlay::project::SpeedSource::Auto)
+        .expect("Failed to load or write CSV file");
 
     assert_eq!(log.samples.len(), 6);
     assert_eq!(log.samples[2].time_ms, 2000); // Lap 1 starts

@@ -23,7 +23,8 @@ fn test_video_decode() {
     assert!(status.success());
 
     // Creating a mock context for the test
-    let mut player = VideoPlayer::new(test_vid_path, || {}).unwrap();
+    let mut player = VideoPlayer::new(test_vid_path, || {})
+        .expect("Failed to initialize VideoPlayer for test video");
 
     let _ = player.seek(100);
     std::thread::sleep(std::time::Duration::from_millis(1500)); // give bg thread time to decode
@@ -31,7 +32,7 @@ fn test_video_decode() {
     let sample = player.get_frame();
     assert!(sample.is_some(), "Should have decoded a frame");
 
-    let frame = sample.unwrap();
+    let frame = sample.expect("Failed to unwrap decoded frame");
     assert_eq!(frame.width, 320);
     assert_eq!(frame.height, 240);
     assert_eq!(frame.data.len(), 320 * 240 * 4); // Tightly packed RGBA

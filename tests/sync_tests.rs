@@ -100,7 +100,7 @@ fn test_auto_correlate_lap_based() {
         g_time += 10000;
     }
     let offset = auto_correlate_gps(&gopro_data, &telemetry_data, MAX_AUTO_SYNC_OFFSET_MS);
-    let found_offset = offset.unwrap();
+    let found_offset = offset.expect("Failed to find auto correlation offset");
     assert!((found_offset - gopro_offset).abs() <= 500);
 }
 
@@ -129,12 +129,15 @@ fn test_auto_correlate_distance_fallback() {
             .samples
             .iter()
             .find(|s| s.time_ms == g_time)
-            .unwrap();
+            .expect("Failed to find telemetry sample at specific time");
         gopro_data_zero.push((g_time, sample.lat, sample.lon));
     }
     let offset = auto_correlate_gps(&gopro_data_zero, &telemetry_data, MAX_AUTO_SYNC_OFFSET_MS);
     assert!(offset.is_some());
-    assert!((offset.unwrap() - expected_offset_zero).abs() <= 100);
+    assert!(
+        (offset.expect("Failed to find auto correlation offset") - expected_offset_zero).abs()
+            <= 100
+    );
 }
 
 #[test]
