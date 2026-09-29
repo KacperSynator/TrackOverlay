@@ -453,44 +453,13 @@ pub fn export_video(
 
     output_ctx.write_trailer()?;
 
-    let mut args = vec![
-        "-y".to_string(),
-        "-i".to_string(),
-        temp_path.to_str().unwrap_or("").to_string(),
-    ];
-
-    // Add start offset for audio from the original video if trimming
-    if let Some(start_ms) = config.export_start_ms {
-        if start_ms > 0 {
-            args.push("-ss".to_string());
-            args.push(format!("{:.3}", start_ms as f64 / 1000.0));
-        }
-    }
-
-    // Output duration is what matters since we trim both inputs appropriately
-    if let Some(end_ms) = config.export_end_ms {
-        let start_ms = config.export_start_ms.unwrap_or(0).max(0);
-        if end_ms >= 0 && end_ms > start_ms {
-            args.push("-t".to_string());
-            args.push(format!("{:.3}", (end_ms - start_ms) as f64 / 1000.0));
-        }
-    }
-
-    args.extend(vec![
-        "-i".to_string(),
-        video_path.to_string(),
-        "-c:v".to_string(),
-        "copy".to_string(),
-        "-c:a".to_string(),
-        "copy".to_string(),
-        "-map".to_string(),
-        "0:v:0".to_string(),
-        "-map".to_string(),
-        "1:a:0?".to_string(),
-        output_path.to_str().unwrap_or("output.mp4").to_string(),
-    ]);
-
-    let status = std::process::Command::new("ffmpeg").args(args).status()?;
+    let status = crate::ff_commands::ffmpeg_mux_exported_video(
+        &video_path,
+        &temp_path,
+        output_path,
+        config.export_start_ms,
+        config.export_end_ms,
+    )?;
 
     if !status.success() {
         std::fs::copy(&temp_path, output_path)?;

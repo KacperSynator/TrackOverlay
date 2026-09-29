@@ -1,6 +1,7 @@
 pub mod app;
 pub mod error;
 pub mod export;
+pub mod ff_commands;
 pub mod gpmf_extract;
 pub mod gui;
 pub mod merge;

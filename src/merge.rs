@@ -1,19 +1,9 @@
 use crate::error::MergeError;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn get_metadata_value(video: &Path, key: &str) -> Result<Option<String>, MergeError> {
-    let output = Command::new("ffprobe")
-        .arg("-v")
-        .arg("quiet")
-        .arg("-show_entries")
-        .arg(format!("format_tags={}", key))
-        .arg("-of")
-        .arg("default=noprint_wrappers=1:nokey=1")
-        .arg("-i")
-        .arg(video)
-        .output()?;
+    let output = crate::ff_commands::ffprobe_get_format_tags(video, key)?;
     let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
     Ok(if value.is_empty() { None } else { Some(value) })
 }
@@ -63,40 +53,12 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf, MergeError>
     let firmware = get_metadata_value(video1, "firmware").unwrap_or(None);
 
     // Execute FFmpeg
-    // GoPro MP4 files often contain obscure/unknown streams (like timecode or other metadata).
-    // Using a generic `-map 0` forces FFmpeg to copy these unknown streams into the new MP4,
-    // which causes the MP4 muxer to fail with "Could not find tag for codec none in stream...".
-    // To safely preserve GPMF telemetry and skip the broken ones, we explicitly map Video (v),
-    // Audio (a), and Data (d).
-    let mut cmd = Command::new("ffmpeg");
-    cmd.arg("-y") // Overwrite output if exists
-        .arg("-f")
-        .arg("concat")
-        .arg("-safe")
-        .arg("0")
-        .arg("-i")
-        .arg(&concat_path_buf)
-        .arg("-c")
-        .arg("copy")
-        .arg("-map")
-        .arg("0:v") // Map video streams
-        .arg("-map")
-        .arg("0:a") // Map audio streams
-        .arg("-map")
-        .arg("0:d") // Map data streams (preserves GPMF telemetry)
-        .arg("-movflags")
-        .arg("use_metadata_tags") // Write metadata tags into the MP4 container
-        .arg("-copy_unknown") // Allow unknown streams (like GPMF) to be copied without failure
-        .arg("-ignore_unknown"); // Ignore unknown stream failures
-
-    if let Some(ct) = creation_time {
-        cmd.arg("-metadata").arg(format!("creation_time={}", ct));
-    }
-    if let Some(fw) = firmware {
-        cmd.arg("-metadata").arg(format!("firmware={}", fw));
-    }
-
-    let status = cmd.arg(&output_path_buf).status()?;
+    let status = crate::ff_commands::ffmpeg_merge_videos(
+        &concat_path_buf,
+        &output_path_buf,
+        creation_time.as_deref(),
+        firmware.as_deref(),
+    )?;
 
     // Cleanup concat file
     let _ = std::fs::remove_file(concat_path_buf);
