@@ -88,6 +88,8 @@ jobs:
   benchmark:
     name: Benchmark
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4.2.2
       - name: Install dependencies
