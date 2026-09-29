@@ -15,33 +15,53 @@ pub struct TrackMap {
 
 const EARTH_RADIUS_M: f64 = 6371000.0;
 
+use crate::telemetry::TelemetrySample;
+
 impl TrackMap {
     pub fn from_telemetry(log: &TelemetryLog, lap_boundaries_ms: &[(u32, i64)]) -> Option<Self> {
         if log.samples.len() < 10 {
             return None;
         }
 
-        // Determine reference point (mean lat/lon)
+        let (lat_ref, lon_ref) = Self::calculate_reference_point(&log.samples);
+        let (projected, min_x, max_x, min_y, max_y) =
+            Self::project_coords(&log.samples, lat_ref, lon_ref);
+        let outline = Self::normalize_coords(&projected, min_x, max_x, min_y, max_y);
+
+        let times_ms: Vec<i64> = log.samples.iter().map(|s| s.time_ms).collect();
+        let start_finish = Self::calculate_start_finish(&outline, &times_ms, lap_boundaries_ms);
+
+        Some(Self {
+            outline,
+            times_ms,
+            start_finish,
+        })
+    }
+
+    fn calculate_reference_point(samples: &[TelemetrySample]) -> (f64, f64) {
         let mut sum_lat = 0.0;
         let mut sum_lon = 0.0;
-        for s in &log.samples {
+        for s in samples {
             sum_lat += s.lat;
             sum_lon += s.lon;
         }
-        let count = log.samples.len() as f64;
-        let lat_ref = sum_lat / count;
-        let lon_ref = sum_lon / count;
+        let count = samples.len() as f64;
+        (sum_lat / count, sum_lon / count)
+    }
 
+    fn project_coords(
+        samples: &[TelemetrySample],
+        lat_ref: f64,
+        lon_ref: f64,
+    ) -> (Vec<(f32, f32)>, f32, f32, f32, f32) {
         let lat_ref_rad = lat_ref.to_radians();
-
-        // Equirectangular projection
-        let mut projected = Vec::with_capacity(log.samples.len());
+        let mut projected = Vec::with_capacity(samples.len());
         let mut min_x = f32::MAX;
         let mut max_x = f32::MIN;
         let mut min_y = f32::MAX;
         let mut max_y = f32::MIN;
 
-        for s in &log.samples {
+        for s in samples {
             let x = ((s.lon - lon_ref).to_radians() * lat_ref_rad.cos() * EARTH_RADIUS_M) as f32;
             let y = ((s.lat - lat_ref).to_radians() * EARTH_RADIUS_M) as f32;
 
@@ -61,7 +81,16 @@ impl TrackMap {
             projected.push((x, y));
         }
 
-        // Normalization (maintain aspect ratio)
+        (projected, min_x, max_x, min_y, max_y)
+    }
+
+    fn normalize_coords(
+        projected: &[(f32, f32)],
+        min_x: f32,
+        max_x: f32,
+        min_y: f32,
+        max_y: f32,
+    ) -> Vec<(f32, f32)> {
         let width = max_x - min_x;
         let height = max_y - min_y;
         let scale = if width > height {
@@ -73,12 +102,9 @@ impl TrackMap {
         let offset_x = -min_x;
         let offset_y = -min_y;
 
-        // Apply normalization
         let mut outline = Vec::with_capacity(projected.len());
-        let mut times_ms = Vec::with_capacity(projected.len());
 
-        for (i, (x, y)) in projected.into_iter().enumerate() {
-            // center the shorter axis
+        for &(x, y) in projected {
             let nx = (x + offset_x) * scale
                 + if height > width {
                     (1.0 - width * scale) / 2.0
@@ -93,19 +119,20 @@ impl TrackMap {
                 };
 
             outline.push((nx, 1.0 - ny)); // Invert Y so North is Up on screen
-            times_ms.push(log.samples[i].time_ms);
         }
 
-        // Determine Start/Finish Line using normalized coords
-        // The first lap often starts at t=0 or near the start, which could be index 0.
-        // We should try to use a valid lap boundary.
+        outline
+    }
+
+    fn calculate_start_finish(
+        outline: &[(f32, f32)],
+        times_ms: &[i64],
+        lap_boundaries_ms: &[(u32, i64)],
+    ) -> ((f32, f32), (f32, f32)) {
         let mut sf_line = ((0.0, 0.0), (0.0, 0.0));
 
         for &(_lap_num, start_time) in lap_boundaries_ms {
             if let Some(idx) = times_ms.iter().position(|&t| t >= start_time) {
-                // If the first lap boundary is at index 0, there is no outline[idx - 1].
-                // We should try to use lap boundary that allows for p1 and p2 around it.
-                // Or if idx == 0, we can use idx and idx + 1.
                 let (i1, i2) = if idx > 0 && idx + 1 < outline.len() {
                     (idx - 1, idx + 1)
                 } else if idx == 0 && outline.len() >= 2 {
@@ -137,11 +164,7 @@ impl TrackMap {
             }
         }
 
-        Some(Self {
-            outline,
-            times_ms,
-            start_finish: sf_line,
-        })
+        sf_line
     }
 
     /// Calculates exactly where on the polyline this specific time falls.
@@ -175,5 +198,102 @@ impl TrackMap {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_reference_point() {
+        let samples = vec![
+            TelemetrySample {
+                time_ms: 0,
+                speed_kph: 0.0,
+                lat: 10.0,
+                lon: 20.0,
+                accel_lat_g: 0.0,
+                accel_lon_g: 0.0,
+                lap_number: None,
+                lap_time_ms: None,
+                throttle_pct: 0.0,
+                brake: 0.0,
+                engine_speed_rpm: 0.0,
+                session_distance_m: 0.0,
+                lap_distance_m: 0.0,
+            },
+            TelemetrySample {
+                time_ms: 1000,
+                speed_kph: 0.0,
+                lat: -10.0,
+                lon: -20.0,
+                accel_lat_g: 0.0,
+                accel_lon_g: 0.0,
+                lap_number: None,
+                lap_time_ms: None,
+                throttle_pct: 0.0,
+                brake: 0.0,
+                engine_speed_rpm: 0.0,
+                session_distance_m: 0.0,
+                lap_distance_m: 0.0,
+            },
+        ];
+
+        let (lat_ref, lon_ref) = TrackMap::calculate_reference_point(&samples);
+        assert_eq!(lat_ref, 0.0);
+        assert_eq!(lon_ref, 0.0);
+    }
+
+    #[test]
+    fn test_normalize_coords() {
+        let projected = vec![(0.0, 0.0), (10.0, 5.0)];
+        let min_x = 0.0;
+        let max_x = 10.0;
+        let min_y = 0.0;
+        let max_y = 5.0;
+
+        let outline = TrackMap::normalize_coords(&projected, min_x, max_x, min_y, max_y);
+
+        // width (10) > height (5). Scale = 1/10 = 0.1
+        // offset_x = 0, offset_y = 0
+        // nx = (x + 0) * 0.1 + 0 = x * 0.1
+        // ny = (y + 0) * 0.1 + (1 - 5 * 0.1) / 2 = y * 0.1 + 0.25
+
+        // Point 1: (0, 0) => nx: 0.0, ny: 0.25. Outline (nx, 1 - ny) = (0.0, 0.75)
+        assert!((outline[0].0 - 0.0).abs() < f32::EPSILON);
+        assert!((outline[0].1 - 0.75).abs() < f32::EPSILON);
+
+        // Point 2: (10, 5) => nx: 1.0, ny: 0.75. Outline (nx, 1 - ny) = (1.0, 0.25)
+        assert!((outline[1].0 - 1.0).abs() < f32::EPSILON);
+        assert!((outline[1].1 - 0.25).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_calculate_start_finish() {
+        let outline = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let times_ms = vec![0, 1000, 2000, 3000];
+        let lap_boundaries_ms = vec![(1, 1000)];
+
+        let ((x1, y1), (x2, y2)) =
+            TrackMap::calculate_start_finish(&outline, &times_ms, &lap_boundaries_ms);
+
+        // idx = 1 (time: 1000). Outline point: (1.0, 0.0).
+        // i1 = 0 (0.0, 0.0), i2 = 2 (1.0, 1.0)
+        // dx = 1.0, dy = 1.0, len = sqrt(2)
+        // px = -1.0 / sqrt(2), py = 1.0 / sqrt(2)
+        // width = 0.05
+
+        let dx = 1.0_f32;
+        let dy = 1.0_f32;
+        let len = (dx * dx + dy * dy).sqrt();
+        let px = -dy / len;
+        let py = dx / len;
+        let width = 0.05;
+
+        assert!((x1 - (1.0 - px * width)).abs() < 1e-5);
+        assert!((y1 - (0.0 - py * width)).abs() < 1e-5);
+        assert!((x2 - (1.0 + px * width)).abs() < 1e-5);
+        assert!((y2 - (0.0 + py * width)).abs() < 1e-5);
     }
 }
