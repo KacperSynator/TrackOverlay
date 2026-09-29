@@ -95,11 +95,16 @@ fn test_trackmap_projection() {
         log_padded.samples.push(log.samples[0].clone());
     }
 
-    let track = TrackMap::from_telemetry(&log_padded, &laps).unwrap();
+    let track = TrackMap::from_telemetry(&log_padded, &laps)
+        .expect("Failed to create TrackMap from telemetry");
 
     // Test that the interpolated points lie within the bounding box
-    let p0 = track.point_at_time(0).unwrap();
-    let p1 = track.point_at_time(2000).unwrap();
+    let p0 = track
+        .point_at_time(0)
+        .expect("Failed to get point at time 0");
+    let p1 = track
+        .point_at_time(2000)
+        .expect("Failed to get point at time 2000");
 
     assert!(p0.0 >= 0.0 && p0.0 <= 1.0);
     assert!(p0.1 >= 0.0 && p0.1 <= 1.0);

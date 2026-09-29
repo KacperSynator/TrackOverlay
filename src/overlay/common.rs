@@ -132,7 +132,7 @@ pub fn draw_text(
 
 #[cfg(test)]
 pub fn create_test_pixmap() -> tiny_skia::Pixmap {
-    tiny_skia::Pixmap::new(800, 600).unwrap()
+    tiny_skia::Pixmap::new(800, 600).expect("Failed to create test Pixmap")
 }
 
 #[cfg(test)]
