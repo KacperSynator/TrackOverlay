@@ -3,6 +3,8 @@ use egui_file_dialog::FileDialog;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use crate::error::{AppError, ExportError, MergeError};
+use crate::export::ExportProgress;
 use crate::gui::controls::render_controls_window;
 use crate::gui::dialogs::handle_dialogs;
 use crate::gui::video_panel::render_video_panel;
@@ -31,19 +33,16 @@ pub struct MyApp {
     pub original_video_rotation: f64,
     pub auto_sync_progress: Option<Arc<Mutex<Option<i64>>>>,
     pub export_progress: Option<String>,
-    pub active_export_progress: Option<Arc<Mutex<crate::export::ExportProgress>>>,
+    pub active_export_progress: Option<Arc<Mutex<ExportProgress>>>,
     pub export_result: Option<Result<String, String>>,
-    pub export_rx: crossbeam_channel::Receiver<
-        Result<crate::export::ExportProgress, crate::error::ExportError>,
-    >,
-    pub export_tx:
-        crossbeam_channel::Sender<Result<crate::export::ExportProgress, crate::error::ExportError>>,
+    pub export_rx: crossbeam_channel::Receiver<Result<ExportProgress, ExportError>>,
+    pub export_tx: crossbeam_channel::Sender<Result<ExportProgress, ExportError>>,
     pub export_start_was_active: bool,
     pub export_end_was_active: bool,
 
     pub merge_progress: Option<String>,
-    pub merge_rx: crossbeam_channel::Receiver<Result<PathBuf, crate::error::MergeError>>,
-    pub merge_tx: crossbeam_channel::Sender<Result<PathBuf, crate::error::MergeError>>,
+    pub merge_rx: crossbeam_channel::Receiver<Result<PathBuf, MergeError>>,
+    pub merge_tx: crossbeam_channel::Sender<Result<PathBuf, MergeError>>,
 
     pub file_dialog: FileDialog,
     pub dialog_mode: DialogMode,
@@ -54,7 +53,7 @@ pub struct MyApp {
     pub video_duration_ms: i64,
 
     pub telemetry_laps: Vec<(u32, i64)>, // Lap number, start_time_ms
-    pub global_error: Option<crate::error::AppError>,
+    pub global_error: Option<AppError>,
 }
 
 impl MyApp {
@@ -170,93 +169,98 @@ impl MyApp {
             self.global_error = None;
         }
     }
-}
 
-impl eframe::App for MyApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let ctx = ui.ctx().clone();
+    fn handle_merge(&mut self, ctx: &egui::Context, res: Result<PathBuf, MergeError>) {
+        match res {
+            Ok(merged_path) => {
+                // Drop the old video player so it releases its file handle (especially on Windows)
+                self.video_player = None;
 
-        if let Ok(res) = self.merge_rx.try_recv() {
-            match res {
-                Ok(merged_path) => {
-                    // Drop the old video player so it releases its file handle (especially on Windows)
-                    self.video_player = None;
-
-                    // Try to delete the old video file if it was a previously merged temp file to save space
-                    let old_path_str = self.config.video_path.to_string_lossy();
-                    if old_path_str.contains("trackoverlay_merged_")
-                        && self.config.video_path.exists()
-                    {
-                        let _ = std::fs::remove_file(&self.config.video_path);
-                    }
-
-                    self.config.video_path = merged_path.clone();
-                    self.playhead_ms = self.config.export_start_ms.unwrap_or(0);
-                    self.last_seek_ms = -1;
-
-                    let repaint_ctx = ctx.clone();
-                    match VideoPlayer::new(&merged_path, move || repaint_ctx.request_repaint()) {
-                        Ok(mut player) => {
-                            if let Some(dur) = player.duration_ms() {
-                                self.video_duration_ms = dur;
-                            }
-                            self.original_video_rotation = player.rotation();
-                            self.video_player = Some(player);
-                            self.merge_progress = None;
-                        }
-                        Err(e) => {
-                            self.video_player = None;
-                            self.global_error = Some(crate::error::AppError::Video(e));
-                            self.merge_progress = None; // clear merge state to unlock UI
-                        }
-                    }
+                // Try to delete the old video file if it was a previously merged temp file to save space
+                let old_path_str = self.config.video_path.to_string_lossy();
+                if old_path_str.contains("trackoverlay_merged_") && self.config.video_path.exists()
+                {
+                    let _ = std::fs::remove_file(&self.config.video_path);
                 }
-                Err(e) => {
-                    self.global_error = Some(crate::error::AppError::Merge(e));
-                    self.merge_progress = None; // clear merge state to unlock UI
+
+                self.config.video_path = merged_path.clone();
+                self.playhead_ms = self.config.export_start_ms.unwrap_or(0);
+                self.last_seek_ms = -1;
+
+                let repaint_ctx = ctx.clone();
+                match VideoPlayer::new(&merged_path, move || repaint_ctx.request_repaint()) {
+                    Ok(mut player) => {
+                        if let Some(dur) = player.duration_ms() {
+                            self.video_duration_ms = dur;
+                        }
+                        self.original_video_rotation = player.rotation();
+                        self.video_player = Some(player);
+                        self.merge_progress = None;
+                    }
+                    Err(e) => {
+                        self.video_player = None;
+                        self.global_error = Some(AppError::Video(e));
+                        self.merge_progress = None; // clear merge state to unlock UI
+                    }
                 }
             }
+            Err(e) => {
+                self.global_error = Some(AppError::Merge(e));
+                self.merge_progress = None; // clear merge state to unlock UI
+            }
+        }
+    }
+
+    fn handle_export(&mut self, res: Result<ExportProgress, ExportError>) {
+        self.active_export_progress = None;
+        match res {
+            Ok(progress) => {
+                self.export_progress = Some("Export completed successfully.".to_string());
+                let elapsed_s = progress
+                    .start_time
+                    .map_or(0.0, |t| t.elapsed().as_secs_f32());
+                let fps = if elapsed_s > 0.0 {
+                    progress.frames_done as f32 / elapsed_s
+                } else {
+                    0.0
+                };
+                let encoder = progress
+                    .encoder_name
+                    .unwrap_or_else(|| "Unknown".to_string());
+
+                let elapsed_str = format!(
+                    "{:02}:{:02}",
+                    (elapsed_s / 60.0).floor(),
+                    (elapsed_s % 60.0).floor()
+                );
+
+                let stats = format!(
+                    "Frames exported: {}\nAvg FPS: {:.1}\nTime taken: {}\nEncoder used: {}",
+                    progress.frames_done, fps, elapsed_str, encoder
+                );
+                self.export_result = Some(Ok(stats));
+            }
+            Err(e) => {
+                self.global_error = Some(AppError::Export(e));
+                self.export_progress = Some("Export failed.".to_string());
+                self.export_result = Some(Err("Export failed.".to_string()));
+            }
+        }
+    }
+
+    pub fn handle_messages(&mut self, ctx: &egui::Context) {
+        if let Ok(res) = self.merge_rx.try_recv() {
+            self.handle_merge(ctx, res);
         }
 
         if let Ok(res) = self.export_rx.try_recv() {
-            self.active_export_progress = None;
-            match res {
-                Ok(progress) => {
-                    self.export_progress = Some("Export completed successfully.".to_string());
-                    let elapsed_s = progress
-                        .start_time
-                        .map_or(0.0, |t| t.elapsed().as_secs_f32());
-                    let fps = if elapsed_s > 0.0 {
-                        progress.frames_done as f32 / elapsed_s
-                    } else {
-                        0.0
-                    };
-                    let encoder = progress
-                        .encoder_name
-                        .unwrap_or_else(|| "Unknown".to_string());
-
-                    let elapsed_str = format!(
-                        "{:02}:{:02}",
-                        (elapsed_s / 60.0).floor(),
-                        (elapsed_s % 60.0).floor()
-                    );
-
-                    let stats = format!(
-                        "Frames exported: {}\nAvg FPS: {:.1}\nTime taken: {}\nEncoder used: {}",
-                        progress.frames_done, fps, elapsed_str, encoder
-                    );
-                    self.export_result = Some(Ok(stats));
-                }
-                Err(e) => {
-                    self.global_error = Some(crate::error::AppError::Export(e));
-                    self.export_progress = Some("Export failed.".to_string());
-                    self.export_result = Some(Err("Export failed.".to_string()));
-                }
-            }
+            self.handle_export(res);
         }
+
         if self.active_export_progress.is_some() {
             ctx.request_repaint();
         }
+
         if self.is_playing {
             let dt = ctx.input(|i| i.stable_dt);
             self.playhead_ms += (dt * 1000.0) as i64;
@@ -273,7 +277,14 @@ impl eframe::App for MyApp {
 
             ctx.request_repaint();
         }
+    }
+}
 
+impl eframe::App for MyApp {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+
+        self.handle_messages(&ctx);
         self.build_ui(ui);
     }
 }
