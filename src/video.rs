@@ -9,6 +9,11 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+const FRAME_CACHE_SIZE: NonZeroUsize = match NonZeroUsize::new(200) {
+    Some(v) => v,
+    None => unreachable!(),
+};
+
 #[derive(Clone)]
 pub struct DecodedFrame {
     pub data: Arc<Vec<u8>>,
@@ -214,8 +219,7 @@ impl VideoPlayer {
                 }
             };
 
-            let frame_cache: LruCache<i64, DecodedFrame> =
-                LruCache::new(NonZeroUsize::new(200).unwrap());
+            let frame_cache: LruCache<i64, DecodedFrame> = LruCache::new(FRAME_CACHE_SIZE);
 
             let worker = VideoDecoderWorker {
                 input_ctx,

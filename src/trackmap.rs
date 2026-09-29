@@ -296,4 +296,69 @@ mod tests {
         assert!((x2 - (1.0 + px * width)).abs() < 1e-5);
         assert!((y2 - (0.0 + py * width)).abs() < 1e-5);
     }
+
+    #[test]
+    fn test_point_at_time() {
+        let track_map = TrackMap {
+            outline: vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)],
+            times_ms: vec![1000, 2000, 3000],
+            start_finish: ((0.0, 0.0), (0.0, 0.0)),
+        };
+
+        // Test exact matches
+        assert_eq!(track_map.point_at_time(1000), Some((0.0, 0.0)));
+        assert_eq!(track_map.point_at_time(2000), Some((10.0, 0.0)));
+        assert_eq!(track_map.point_at_time(3000), Some((10.0, 10.0)));
+
+        // Test before first timestamp clamps to first point
+        assert_eq!(track_map.point_at_time(500), Some((0.0, 0.0)));
+        assert_eq!(track_map.point_at_time(0), Some((0.0, 0.0)));
+
+        // Test after last timestamp clamps to last point
+        assert_eq!(track_map.point_at_time(3500), Some((10.0, 10.0)));
+        assert_eq!(track_map.point_at_time(4000), Some((10.0, 10.0)));
+
+        // Test interpolation (exactly halfway between 1000 and 2000)
+        assert_eq!(track_map.point_at_time(1500), Some((5.0, 0.0)));
+
+        // Test interpolation (75% between 2000 and 3000)
+        assert_eq!(track_map.point_at_time(2750), Some((10.0, 7.5)));
+
+        // Test empty times/outline
+        let empty_track = TrackMap {
+            outline: vec![],
+            times_ms: vec![],
+            start_finish: ((0.0, 0.0), (0.0, 0.0)),
+        };
+        assert_eq!(empty_track.point_at_time(1000), None);
+
+        let empty_outline_track = TrackMap {
+            outline: vec![],
+            times_ms: vec![1000],
+            start_finish: ((0.0, 0.0), (0.0, 0.0)),
+        };
+        assert_eq!(empty_outline_track.point_at_time(1000), None);
+
+        let empty_times_track = TrackMap {
+            outline: vec![(0.0, 0.0)],
+            times_ms: vec![],
+            start_finish: ((0.0, 0.0), (0.0, 0.0)),
+        };
+        assert_eq!(empty_times_track.point_at_time(1000), None);
+
+        // Test handling of duplicate timestamps.
+        // Note: A strict `dt == 0.0` inside the interpolation branch is mathematically unreachable
+        // with `binary_search` since it cannot return an insertion index between equal elements.
+        let duplicate_track = TrackMap {
+            outline: vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)],
+            times_ms: vec![2000, 2000, 2000],
+            start_finish: ((0.0, 0.0), (0.0, 0.0)),
+        };
+
+        let point = duplicate_track.point_at_time(2000).unwrap();
+        assert!(point == (0.0, 0.0) || point == (10.0, 0.0) || point == (10.0, 10.0));
+
+        assert_eq!(duplicate_track.point_at_time(1500), Some((0.0, 0.0)));
+        assert_eq!(duplicate_track.point_at_time(2500), Some((10.0, 10.0)));
+    }
 }
