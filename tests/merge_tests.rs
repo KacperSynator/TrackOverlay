@@ -5,25 +5,23 @@ use track_overlay::merge::merge_videos;
 
 fn create_mock_video(path: &Path) {
     let status = Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-f",
-            "lavfi",
-            "-i",
-            "testsrc=duration=1:size=320x240:rate=30",
-            "-f",
-            "lavfi",
-            "-i",
-            "anullsrc=r=44100:cl=stereo",
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac",
-            "-shortest",
-            "-pix_fmt",
-            "yuv420p",
-            path.to_str().unwrap(),
-        ])
+        .arg("-y")
+        .arg("-f")
+        .arg("lavfi")
+        .arg("-i")
+        .arg("testsrc=duration=1:size=320x240:rate=30")
+        .arg("-f")
+        .arg("lavfi")
+        .arg("-i")
+        .arg("anullsrc=r=44100:cl=stereo")
+        .arg("-c:v")
+        .arg("libx264")
+        .arg("-c:a")
+        .arg("aac")
+        .arg("-shortest")
+        .arg("-pix_fmt")
+        .arg("yuv420p")
+        .arg(path.to_str().unwrap())
         .status()
         .expect("Failed to run ffmpeg to create test video");
 
@@ -49,15 +47,13 @@ fn test_merge_videos_success() {
 
     // Attempt to parse output using ffprobe to ensure it's a valid video
     let status = Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            merged_path.to_str().unwrap(),
-        ])
+        .arg("-v")
+        .arg("error")
+        .arg("-show_entries")
+        .arg("format=duration")
+        .arg("-of")
+        .arg("default=noprint_wrappers=1:nokey=1")
+        .arg(merged_path.to_str().unwrap())
         .status()
         .expect("Failed to run ffprobe on merged video");
 
