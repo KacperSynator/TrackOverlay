@@ -156,3 +156,71 @@ pub fn ffmpeg_mux_exported_video(
 
     cmd.status()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+    use tempfile::NamedTempFile;
+
+    fn create_dummy_video_with_metadata(key: &str, value: &str) -> NamedTempFile {
+        let temp_file = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create temp file");
+
+        let status = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg("color=c=black:s=10x10:d=1")
+            .arg("-metadata")
+            .arg(format!("{}={}", key, value))
+            .arg(temp_file.path())
+            .status()
+            .expect("Failed to run ffmpeg to create dummy video");
+
+        assert!(
+            status.success(),
+            "ffmpeg command failed to create dummy video"
+        );
+        temp_file
+    }
+
+    #[test]
+    fn test_ffprobe_get_format_tags_success() {
+        let expected_time = "2023-01-01T12:00:00.000000Z";
+        let dummy_video = create_dummy_video_with_metadata("creation_time", expected_time);
+
+        let output = ffprobe_get_format_tags(dummy_video.path(), "creation_time")
+            .expect("failed to execute ffprobe_get_format_tags");
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(stdout.trim(), expected_time);
+    }
+
+    #[test]
+    fn test_ffprobe_get_format_tags_missing_key() {
+        let dummy_video =
+            create_dummy_video_with_metadata("creation_time", "2023-01-01T12:00:00.000000Z");
+
+        let output = ffprobe_get_format_tags(dummy_video.path(), "non_existent_key")
+            .expect("failed to execute ffprobe_get_format_tags");
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(stdout.trim(), "");
+    }
+
+    #[test]
+    fn test_ffprobe_get_format_tags_file_not_found() {
+        let non_existent_path = Path::new("does_not_exist_xyz.mp4");
+
+        let output = ffprobe_get_format_tags(non_existent_path, "creation_time")
+            .expect("failed to execute ffprobe_get_format_tags");
+
+        assert!(!output.status.success());
+    }
+}
