@@ -223,4 +223,74 @@ mod tests {
 
         assert!(!output.status.success());
     }
+
+    #[test]
+    fn test_ffprobe_find_telemetry_stream_success() {
+        let temp_timecode = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create temp timecode video file");
+
+        let status = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg("color=c=black:s=10x10:d=1")
+            .arg("-c:v")
+            .arg("libx264")
+            .arg("-timecode")
+            .arg("00:00:00:00")
+            .arg(temp_timecode.path())
+            .status()
+            .expect("Failed to create video with timecode data stream");
+        assert!(status.success(), "ffmpeg failed to create timecode stream");
+
+        let output =
+            ffprobe_find_telemetry_stream(temp_timecode.path().to_str().expect("valid utf8 path"))
+                .expect("failed to execute ffprobe_find_telemetry_stream");
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("tmcd"));
+    }
+
+    #[test]
+    fn test_ffmpeg_dump_telemetry_success() {
+        let temp_timecode = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create temp timecode video file");
+
+        let status = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg("color=c=black:s=10x10:d=1")
+            .arg("-c:v")
+            .arg("libx264")
+            .arg("-timecode")
+            .arg("00:00:00:00")
+            .arg(temp_timecode.path())
+            .status()
+            .expect("Failed to create video with timecode data stream");
+        assert!(status.success());
+
+        let dump_out = tempfile::Builder::new()
+            .suffix(".bin")
+            .tempfile()
+            .expect("Failed to create temp dump bin");
+
+        let exit_status = ffmpeg_dump_telemetry(
+            temp_timecode.path().to_str().expect("valid utf8 path"),
+            "d:0",
+            dump_out.path(),
+        )
+        .expect("failed to dump telemetry");
+
+        assert!(exit_status.success());
+        let meta = std::fs::metadata(dump_out.path()).unwrap();
+        assert!(meta.len() > 0);
+    }
 }
