@@ -83,3 +83,32 @@ fn test_merge_videos_non_existent_files() {
         }
     }
 }
+
+#[test]
+fn test_merge_videos_invalid_path_injection() {
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+
+    let video1_path = temp_dir.path().join("vid1.mp4'\nfile '/tmp");
+    let video2_path = temp_dir.path().join("vid2.mp4");
+
+    let results = [
+        merge_videos(&video1_path, &video2_path),
+        merge_videos(&video2_path, &video1_path),
+    ];
+
+    results.iter().for_each(|result| {
+        assert!(
+            result.is_err(),
+            "Merge should fail when any path contains newlines"
+        );
+
+        match result.as_ref().unwrap_err() {
+            MergeError::InvalidPath(msg) => {
+                assert!(msg.contains("newline"), "Expected newline validation error");
+            }
+            e => {
+                panic!("Expected MergeError::InvalidPath, got {:?}", e);
+            }
+        }
+    });
+}

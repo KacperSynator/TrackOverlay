@@ -9,6 +9,22 @@ fn get_metadata_value(video: &Path, key: &str) -> Result<Option<String>, MergeEr
 }
 
 pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf, MergeError> {
+    let video1_lossy = video1.to_string_lossy();
+    let video2_lossy = video2.to_string_lossy();
+
+    // Prevent path injection vulnerabilities via newline characters
+    // since the FFmpeg concat demuxer reads line by line.
+    if video1_lossy.contains('\n') || video1_lossy.contains('\r') {
+        return Err(MergeError::InvalidPath(
+            "video1 path contains newline characters".to_string(),
+        ));
+    }
+    if video2_lossy.contains('\n') || video2_lossy.contains('\r') {
+        return Err(MergeError::InvalidPath(
+            "video2 path contains newline characters".to_string(),
+        ));
+    }
+
     let mut concat_file = tempfile::Builder::new()
         .prefix("trackoverlay_concat_")
         .suffix(".txt")
@@ -17,14 +33,8 @@ pub fn merge_videos(video1: &Path, video2: &Path) -> Result<PathBuf, MergeError>
     // FFmpeg concat demuxer requires paths to be escaped or wrapped in quotes.
     // Importantly, FFmpeg parses backslashes as escape characters even inside quotes.
     // So we replace backslashes with forward slashes for cross-platform safety.
-    let path1_str = video1
-        .to_string_lossy()
-        .replace('\\', "/")
-        .replace('\'', "'\\''");
-    let path2_str = video2
-        .to_string_lossy()
-        .replace('\\', "/")
-        .replace('\'', "'\\''");
+    let path1_str = video1_lossy.replace('\\', "/").replace('\'', "'\\''");
+    let path2_str = video2_lossy.replace('\\', "/").replace('\'', "'\\''");
 
     writeln!(concat_file, "file '{}'", path1_str)?;
     writeln!(concat_file, "file '{}'", path2_str)?;

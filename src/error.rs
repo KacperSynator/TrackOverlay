@@ -68,6 +68,8 @@ pub enum MergeError {
     CommandFailed(std::process::ExitStatus),
     #[error("Path persist error: {0}")]
     PathPersist(#[from] tempfile::PathPersistError),
+    #[error("Invalid path: {0}")]
+    InvalidPath(String),
 }
 
 #[derive(Error, Debug)]
