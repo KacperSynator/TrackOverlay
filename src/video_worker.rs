@@ -67,6 +67,38 @@ impl VideoDecoderWorker {
         }
     }
 
+    fn process_decoded_frame(
+        scaler: &mut ffmpeg::software::scaling::Context,
+        time_base: f64,
+        decoded: &ffmpeg::frame::Video,
+        current_pts: i64,
+    ) -> Option<DecodedFrame> {
+        let mut rgb_frame = ffmpeg::frame::Video::empty();
+        if scaler.run(decoded, &mut rgb_frame).is_ok() {
+            let w = rgb_frame.width() as usize;
+            let h = rgb_frame.height() as usize;
+            let stride = rgb_frame.stride(0);
+
+            let mut packed_data = Vec::with_capacity(w * h * 4);
+            let raw_data = rgb_frame.data(0);
+
+            for y in 0..h {
+                let row_start = y * stride;
+                let row_end = row_start + w * 4;
+                packed_data.extend_from_slice(&raw_data[row_start..row_end]);
+            }
+
+            Some(DecodedFrame {
+                data: Arc::new(packed_data),
+                width: w as u32,
+                height: h as u32,
+                pts_ms: (current_pts as f64 * time_base * 1000.0) as i64,
+            })
+        } else {
+            None
+        }
+    }
+
     fn decode_to_target(&mut self, target_pts: i64, current_decoder_pts: &mut i64) {
         let mut decoded = ffmpeg::frame::Video::empty();
         let packet_iter = self.input_ctx.packets();
@@ -78,54 +110,44 @@ impl VideoDecoderWorker {
                 warn!("Timed out decoding forward to PTS {}", target_pts);
                 break;
             }
+
             attempt_limit -= 1;
 
-            if stream.index() == self.video_stream_index {
-                if self.decoder.send_packet(&packet).is_err() {
-                    continue;
-                }
+            if stream.index() != self.video_stream_index {
+                continue;
+            }
 
-                while self.decoder.receive_frame(&mut decoded).is_ok() {
-                    let current_pts = decoded.pts().unwrap_or(*current_decoder_pts);
-                    *current_decoder_pts = current_pts;
+            if self.decoder.send_packet(&packet).is_err() {
+                continue;
+            }
 
-                    let mut rgb_frame = ffmpeg::frame::Video::empty();
-                    if self.scaler.run(&decoded, &mut rgb_frame).is_ok() {
-                        let w = rgb_frame.width() as usize;
-                        let h = rgb_frame.height() as usize;
-                        let stride = rgb_frame.stride(0);
+            while self.decoder.receive_frame(&mut decoded).is_ok() {
+                let current_pts = decoded.pts().unwrap_or(*current_decoder_pts);
+                *current_decoder_pts = current_pts;
 
-                        let mut packed_data = Vec::with_capacity(w * h * 4);
-                        let raw_data = rgb_frame.data(0);
+                if let Some(frame) = Self::process_decoded_frame(
+                    &mut self.scaler,
+                    self.time_base,
+                    &decoded,
+                    current_pts,
+                ) {
+                    self.frame_cache.put(current_pts, frame.clone());
 
-                        for y in 0..h {
-                            let row_start = y * stride;
-                            let row_end = row_start + w * 4;
-                            packed_data.extend_from_slice(&raw_data[row_start..row_end]);
-                        }
-
-                        let frame = DecodedFrame {
-                            data: Arc::new(packed_data),
-                            width: w as u32,
-                            height: h as u32,
-                            pts_ms: (current_pts as f64 * self.time_base * 1000.0) as i64,
-                        };
-
-                        self.frame_cache.put(current_pts, frame.clone());
-
-                        if current_pts >= target_pts {
-                            if let Ok(mut lf) = self.latest_frame_bg.lock() {
-                                *lf = Some(frame);
-                            }
-                            (self.repaint_cb)();
-                            return;
-                        }
+                    if current_pts < target_pts {
+                        continue;
                     }
-                }
 
-                if *current_decoder_pts >= target_pts {
+                    if let Ok(mut lf) = self.latest_frame_bg.lock() {
+                        *lf = Some(frame);
+                    }
+
+                    (self.repaint_cb)();
                     return;
                 }
+            }
+
+            if *current_decoder_pts >= target_pts {
+                return;
             }
         }
     }
