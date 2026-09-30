@@ -129,7 +129,7 @@ pub fn export_video(
         selected_pix_fmt = ffmpeg::format::Pixel::YUV420P;
     }
 
-    let mut encoder = selected_encoder_ctx.unwrap();
+    let mut encoder = selected_encoder_ctx.ok_or(ExportError::NoEncoder)?;
 
     if let Some(p) = &progress {
         if let Ok(mut lock) = p.lock() {
