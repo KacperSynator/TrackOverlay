@@ -36,6 +36,56 @@ fn test_parse_video_rotation_from_json_display_matrix_int() {
 }
 
 #[test]
+fn test_parse_video_rotation_from_json_display_matrix_wrong_type() {
+    let json_str = r#"{
+        "streams": [
+            {
+                "side_data_list": [
+                    {
+                        "side_data_type": "Something Else",
+                        "rotation": 90.0
+                    }
+                ]
+            }
+        ]
+    }"#;
+    assert_eq!(parse_video_rotation_from_json(json_str), None);
+}
+
+#[test]
+fn test_parse_video_rotation_from_json_display_matrix_missing_rotation() {
+    let json_str = r#"{
+        "streams": [
+            {
+                "side_data_list": [
+                    {
+                        "side_data_type": "Display Matrix"
+                    }
+                ]
+            }
+        ]
+    }"#;
+    assert_eq!(parse_video_rotation_from_json(json_str), None);
+}
+
+#[test]
+fn test_parse_video_rotation_from_json_display_matrix_invalid_rotation_type() {
+    let json_str = r#"{
+        "streams": [
+            {
+                "side_data_list": [
+                    {
+                        "side_data_type": "Display Matrix",
+                        "rotation": "not a number"
+                    }
+                ]
+            }
+        ]
+    }"#;
+    assert_eq!(parse_video_rotation_from_json(json_str), None);
+}
+
+#[test]
 fn test_parse_video_rotation_from_json_tags_rotate() {
     let json_str = r#"{
         "streams": [
