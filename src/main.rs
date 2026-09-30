@@ -63,7 +63,7 @@ fn main() -> eframe::Result {
     }
 
     if std::env::var("HEADLESS_TEST").is_ok() {
-        println!("Headless test successful.");
+        info!("Headless test successful.");
         return Ok(());
     }
 
