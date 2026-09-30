@@ -41,11 +41,8 @@ pub struct VideoPlayer {
     error_state: Arc<Mutex<Option<String>>>,
 }
 
-pub fn get_video_rotation(path_str: &str) -> Option<f64> {
-    let output = crate::ff_commands::ffprobe_get_video_rotation(path_str).ok()?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout)
+pub fn parse_video_rotation_from_json(json_str: &str) -> Option<f64> {
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str)
         && let Some(streams) = json.get("streams").and_then(|s| s.as_array())
         && let Some(stream) = streams.first()
     {
@@ -83,6 +80,12 @@ pub fn get_video_rotation(path_str: &str) -> Option<f64> {
         }
     }
     None
+}
+
+pub fn get_video_rotation(path_str: &str) -> Option<f64> {
+    let output = crate::ff_commands::ffprobe_get_video_rotation(path_str).ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_video_rotation_from_json(&stdout)
 }
 
 impl Drop for VideoPlayer {
