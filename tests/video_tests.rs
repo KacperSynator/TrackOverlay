@@ -1,5 +1,107 @@
 use std::process::Command;
-use track_overlay::video::VideoPlayer;
+use track_overlay::video::{VideoPlayer, parse_video_rotation_from_json};
+
+#[test]
+fn test_parse_video_rotation_from_json_display_matrix_float() {
+    let json_str = r#"{
+        "streams": [
+            {
+                "side_data_list": [
+                    {
+                        "side_data_type": "Display Matrix",
+                        "rotation": 90.0
+                    }
+                ]
+            }
+        ]
+    }"#;
+    assert_eq!(parse_video_rotation_from_json(json_str), Some(90.0));
+}
+
+#[test]
+fn test_parse_video_rotation_from_json_display_matrix_int() {
+    let json_str = r#"{
+        "streams": [
+            {
+                "side_data_list": [
+                    {
+                        "side_data_type": "Display Matrix",
+                        "rotation": -90
+                    }
+                ]
+            }
+        ]
+    }"#;
+    assert_eq!(parse_video_rotation_from_json(json_str), Some(-90.0));
+}
+
+#[test]
+fn test_parse_video_rotation_from_json_tags_rotate() {
+    let json_str = r#"{
+        "streams": [
+            {
+                "tags": {
+                    "rotate": "180"
+                }
+            }
+        ]
+    }"#;
+    assert_eq!(parse_video_rotation_from_json(json_str), Some(180.0));
+}
+
+#[test]
+fn test_parse_video_rotation_from_json_tags_rotation() {
+    let json_str = r#"{
+        "streams": [
+            {
+                "tags": {
+                    "rotation": "270"
+                }
+            }
+        ]
+    }"#;
+    assert_eq!(parse_video_rotation_from_json(json_str), Some(270.0));
+}
+
+#[test]
+fn test_parse_video_rotation_from_json_invalid_json() {
+    let json_str = r#"{ "streams": [ { "tags": { "rotate": "180" "#;
+    assert_eq!(parse_video_rotation_from_json(json_str), None);
+}
+
+#[test]
+fn test_parse_video_rotation_from_json_missing_streams() {
+    let json_str = r#"{
+        "format": {
+            "tags": {
+                "rotate": "180"
+            }
+        }
+    }"#;
+    assert_eq!(parse_video_rotation_from_json(json_str), None);
+}
+
+#[test]
+fn test_parse_video_rotation_from_json_empty_streams() {
+    let json_str = r#"{
+        "streams": []
+    }"#;
+    assert_eq!(parse_video_rotation_from_json(json_str), None);
+}
+
+#[test]
+fn test_parse_video_rotation_from_json_no_rotation_data() {
+    let json_str = r#"{
+        "streams": [
+            {
+                "codec_type": "video",
+                "width": 1920,
+                "height": 1080
+            }
+        ]
+    }"#;
+    assert_eq!(parse_video_rotation_from_json(json_str), None);
+}
 
 #[test]
 fn test_video_decode() {
