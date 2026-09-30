@@ -3,6 +3,7 @@ use crate::error::ExportError;
 use crate::project::ProjectConfig;
 use crate::telemetry::TelemetryLog;
 use ffmpeg_next as ffmpeg;
+use log::{error, info};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -32,7 +33,7 @@ pub fn export_video(
     output_path: &Path,
     progress: Option<Arc<Mutex<ExportProgress>>>,
 ) -> Result<ExportProgress, ExportError> {
-    println!("Starting export for {:?}", config.video_path);
+    info!("Starting export for {:?}", config.video_path);
 
     let video_path = config.video_path.to_str().unwrap_or("").to_string();
     if video_path.is_empty() {
@@ -91,7 +92,7 @@ pub fn export_video(
                 // Do not set preset="medium" for hardware encoders as it causes crashes (e.g. AMF)
 
                 if let Ok(opened_encoder) = encoder_ctx_video.open_as_with(codec, opts) {
-                    println!("Successfully initialized hardware encoder: {}", name);
+                    info!("Successfully initialized hardware encoder: {}", name);
                     output_stream.set_parameters(&opened_encoder);
                     selected_encoder_ctx = Some(opened_encoder);
                     selected_encoder_name = Some(name.to_string());
@@ -122,7 +123,7 @@ pub fn export_video(
         opts.set("crf", "18");
 
         let opened_encoder = encoder_ctx_video.open_as_with(sw_codec, opts)?;
-        println!("Successfully initialized software encoder (libx264)");
+        info!("Successfully initialized software encoder (libx264)");
         output_stream.set_parameters(&opened_encoder);
         selected_encoder_ctx = Some(opened_encoder);
         selected_encoder_name = Some("libx264 (Software)".to_string());
@@ -236,7 +237,7 @@ pub fn export_video(
             // Seek expects timestamps in AV_TIME_BASE (microseconds)
             let pts = (start_ms as f64 * 1000.0) as i64;
             input_ctx.seek(pts, ..pts).unwrap_or_else(|e| {
-                eprintln!("Failed to seek to start: {}", e);
+                error!("Failed to seek to start: {}", e);
             });
         }
     }
