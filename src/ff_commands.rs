@@ -293,4 +293,173 @@ mod tests {
         let meta = std::fs::metadata(dump_out.path()).unwrap();
         assert!(meta.len() > 0);
     }
+
+    #[test]
+    fn test_ffmpeg_merge_videos_with_metadata() {
+        let concat_list = tempfile::Builder::new()
+            .suffix(".txt")
+            .tempfile()
+            .expect("Failed to create concat file");
+
+        let temp_video = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create temp video");
+
+        let status = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg("color=c=black:s=10x10:d=1")
+            .arg("-c:v")
+            .arg("libx264")
+            .arg(temp_video.path())
+            .status()
+            .expect("Failed to create dummy video");
+        assert!(status.success());
+
+        let safe_path = temp_video
+            .path()
+            .to_str()
+            .unwrap()
+            .replace('\\', "/")
+            .replace('\'', "'\\''");
+        std::fs::write(concat_list.path(), format!("file '{}'\n", safe_path)).unwrap();
+
+        let output_video = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create output video");
+
+        let exit_status = ffmpeg_merge_videos(
+            concat_list.path(),
+            output_video.path(),
+            Some("2024-01-01T12:00:00Z"),
+            Some("HD9.01.01.70.00"),
+        )
+        .expect("Failed to run ffmpeg_merge_videos");
+
+        assert!(exit_status.success());
+
+        let probe = ffprobe_get_format_tags(output_video.path(), "creation_time").unwrap();
+        assert!(String::from_utf8_lossy(&probe.stdout).contains("2024-01-01T12:00:00Z"));
+
+        let probe_fw = ffprobe_get_format_tags(output_video.path(), "firmware").unwrap();
+        assert!(String::from_utf8_lossy(&probe_fw.stdout).contains("HD9.01.01.70.00"));
+    }
+
+    #[test]
+    fn test_ffmpeg_mux_exported_video_with_trim() {
+        let temp_video = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create temp video");
+
+        let status = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg("color=c=black:s=10x10:d=3") // 3 seconds long
+            .arg("-c:v")
+            .arg("libx264")
+            .arg(temp_video.path())
+            .status()
+            .expect("Failed to create dummy video");
+        assert!(status.success());
+
+        let temp_audio = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create temp audio/source video");
+
+        let status2 = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg("anullsrc=r=44100:cl=mono")
+            .arg("-t")
+            .arg("3")
+            .arg("-c:a")
+            .arg("aac")
+            .arg(temp_audio.path())
+            .status()
+            .expect("Failed to create dummy audio");
+        assert!(status2.success());
+
+        let output_video = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create output video");
+
+        let exit_status = ffmpeg_mux_exported_video(
+            temp_audio.path().to_str().unwrap(),
+            temp_video.path(),
+            output_video.path(),
+            Some(1000), // Start at 1s
+            Some(2000), // End at 2s (duration 1s)
+        )
+        .expect("Failed to mux");
+
+        assert!(exit_status.success());
+    }
+
+    #[test]
+    fn test_ffmpeg_mux_exported_video_no_trim() {
+        let temp_video = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create temp video");
+
+        let status = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg("color=c=black:s=10x10:d=1")
+            .arg("-c:v")
+            .arg("libx264")
+            .arg(temp_video.path())
+            .status()
+            .expect("Failed to create dummy video");
+        assert!(status.success());
+
+        let temp_audio = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create temp audio/source video");
+
+        let status2 = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg("anullsrc=r=44100:cl=mono")
+            .arg("-t")
+            .arg("1")
+            .arg("-c:a")
+            .arg("aac")
+            .arg(temp_audio.path())
+            .status()
+            .expect("Failed to create dummy audio");
+        assert!(status2.success());
+
+        let output_video = tempfile::Builder::new()
+            .suffix(".mp4")
+            .tempfile()
+            .expect("Failed to create output video");
+
+        let exit_status = ffmpeg_mux_exported_video(
+            temp_audio.path().to_str().unwrap(),
+            temp_video.path(),
+            output_video.path(),
+            None,
+            None,
+        )
+        .expect("Failed to mux");
+
+        assert!(exit_status.success());
+    }
 }
