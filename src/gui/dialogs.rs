@@ -86,12 +86,14 @@ fn handle_pick_export_output(app: &mut MyApp, path_buf: PathBuf) {
     let config_clone = app.config.clone();
     let telem_clone = if let Some(t) = &app.telemetry {
         TelemetryLog {
+            raw_samples: t.raw_samples.clone(),
             samples: t.samples.clone(),
             start_time_utc: t.start_time_utc,
             parsed_speed_source: t.parsed_speed_source.clone(),
         }
     } else {
         TelemetryLog {
+            raw_samples: vec![],
             samples: vec![],
             start_time_utc: None,
             parsed_speed_source: crate::project::SpeedSource::Auto,

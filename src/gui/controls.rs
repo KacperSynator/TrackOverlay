@@ -166,12 +166,77 @@ fn render_settings_section(app: &mut MyApp, ui: &mut egui::Ui) {
         }
     });
 
-    if changed {
-        app.config.speed_source = speed_source;
-        if let Ok(log) = crate::telemetry::TelemetryLog::load_csv(
+    let mut interp_mode = app.config.interpolation_mode.clone();
+    let mut interp_points = app.config.interpolation_points;
+    let mut interp_changed = false;
+
+    ui.horizontal(|ui| {
+        ui.label("Interpolation Mode:");
+        egui::ComboBox::from_id_salt("interpolation_mode_combo")
+            .selected_text(format!("{:?}", interp_mode))
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_value(
+                        &mut interp_mode,
+                        crate::project::InterpolationMode::None,
+                        "None",
+                    )
+                    .clicked()
+                {
+                    interp_changed = true;
+                }
+                if ui
+                    .selectable_value(
+                        &mut interp_mode,
+                        crate::project::InterpolationMode::Linear,
+                        "Linear",
+                    )
+                    .clicked()
+                {
+                    interp_changed = true;
+                }
+                if ui
+                    .selectable_value(
+                        &mut interp_mode,
+                        crate::project::InterpolationMode::Cubic,
+                        "Cubic",
+                    )
+                    .clicked()
+                {
+                    interp_changed = true;
+                }
+            });
+    });
+
+    ui.horizontal(|ui| {
+        let response = ui.add(
+            egui::DragValue::new(&mut interp_points)
+                .range(0..=10)
+                .speed(1)
+                .prefix("Interpolation Points: "),
+        );
+        if response.changed() {
+            interp_changed = true;
+        }
+    });
+
+    if changed || interp_changed {
+        if changed {
+            app.config.speed_source = speed_source;
+        }
+        if interp_changed {
+            app.config.interpolation_mode = interp_mode;
+            app.config.interpolation_points = interp_points;
+        }
+
+        if let Ok(mut log) = crate::telemetry::TelemetryLog::load_csv(
             &app.config.telemetry_path,
             app.config.speed_source.clone(),
         ) {
+            log.apply_interpolation(
+                &app.config.interpolation_mode,
+                app.config.interpolation_points,
+            );
             app.telemetry = Some(log);
             app.recalculate_telemetry();
         }
@@ -345,12 +410,14 @@ fn render_auto_sync(app: &mut MyApp, ui: &mut egui::Ui) -> bool {
             let video_path = app.config.video_path.to_string_lossy().to_string();
             let telem_clone = if let Some(t) = &app.telemetry {
                 TelemetryLog {
+                    raw_samples: t.raw_samples.clone(),
                     samples: t.samples.clone(),
                     start_time_utc: t.start_time_utc,
                     parsed_speed_source: t.parsed_speed_source.clone(),
                 }
             } else {
                 TelemetryLog {
+                    raw_samples: vec![],
                     samples: vec![],
                     start_time_utc: None,
                     parsed_speed_source: crate::project::SpeedSource::Auto,

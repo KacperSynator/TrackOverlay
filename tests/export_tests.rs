@@ -86,6 +86,8 @@ fn test_export_video_success() {
         export_start_ms: None,
         export_end_ms: None,
         speed_source: SpeedSource::Auto,
+        interpolation_mode: track_overlay::project::InterpolationMode::Linear,
+        interpolation_points: 0,
     };
 
     let telemetry = TelemetryLog::load_csv(&telemetry_path, config.speed_source.clone())
@@ -136,6 +138,8 @@ fn test_export_video_no_video_path() {
         export_start_ms: None,
         export_end_ms: None,
         speed_source: SpeedSource::Auto,
+        interpolation_mode: track_overlay::project::InterpolationMode::Linear,
+        interpolation_points: 0,
     };
 
     let telemetry = TelemetryLog::load_csv(&telemetry_path, config.speed_source.clone())
@@ -179,6 +183,8 @@ fn test_export_video_missing_file() {
         export_start_ms: None,
         export_end_ms: None,
         speed_source: SpeedSource::Auto,
+        interpolation_mode: track_overlay::project::InterpolationMode::Linear,
+        interpolation_points: 0,
     };
 
     let telemetry = TelemetryLog::load_csv(&telemetry_path, config.speed_source.clone())
@@ -223,6 +229,8 @@ fn test_export_video_no_video_stream() {
         export_start_ms: None,
         export_end_ms: None,
         speed_source: SpeedSource::Auto,
+        interpolation_mode: track_overlay::project::InterpolationMode::Linear,
+        interpolation_points: 0,
     };
 
     let telemetry = TelemetryLog::load_csv(&telemetry_path, config.speed_source.clone())

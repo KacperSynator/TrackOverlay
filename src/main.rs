@@ -44,6 +44,7 @@ fn main() -> eframe::Result {
                 .unwrap_or_else(|e| {
                     error!("Failed to load telemetry: {}", e);
                     TelemetryLog {
+                        raw_samples: vec![],
                         samples: vec![],
                         start_time_utc: None,
                         parsed_speed_source: track_overlay::project::SpeedSource::Auto,
@@ -51,6 +52,7 @@ fn main() -> eframe::Result {
                 })
         } else {
             TelemetryLog {
+                raw_samples: vec![],
                 samples: vec![],
                 start_time_utc: None,
                 parsed_speed_source: track_overlay::project::SpeedSource::Auto,

@@ -25,6 +25,7 @@ const MAX_AUTO_SYNC_OFFSET_MS: i64 = 300000;
 fn test_auto_correlate_empty_data() {
     let empty_gopro: Vec<(i64, f64, f64)> = vec![];
     let empty_telemetry = TelemetryLog {
+        raw_samples: vec![],
         samples: vec![],
         start_time_utc: None,
         parsed_speed_source: track_overlay::project::SpeedSource::Auto,
@@ -32,6 +33,7 @@ fn test_auto_correlate_empty_data() {
 
     let one_gopro = vec![(0, 0.0, 0.0)];
     let one_telemetry = TelemetryLog {
+        raw_samples: vec![create_sample(0, 0.0, 0.0, None)],
         samples: vec![create_sample(0, 0.0, 0.0, None)],
         start_time_utc: None,
         parsed_speed_source: track_overlay::project::SpeedSource::Auto,
@@ -85,6 +87,7 @@ fn test_auto_correlate_lap_based() {
         time += 10000;
     }
     let telemetry_data = TelemetryLog {
+        raw_samples: telem_samples.clone(),
         samples: telem_samples,
         start_time_utc: None,
         parsed_speed_source: track_overlay::project::SpeedSource::Auto,
@@ -119,6 +122,7 @@ fn test_auto_correlate_distance_fallback() {
         telem_samples.push(create_sample(t, current_lat, 18.0, None));
     }
     let telemetry_data = TelemetryLog {
+        raw_samples: telem_samples.clone(),
         samples: telem_samples,
         start_time_utc: None,
         parsed_speed_source: track_overlay::project::SpeedSource::Auto,
@@ -151,6 +155,7 @@ fn test_auto_correlate_failure() {
         telem_samples.push(create_sample(t, current_lat, 18.0, None));
     }
     let telemetry_data = TelemetryLog {
+        raw_samples: telem_samples.clone(),
         samples: telem_samples,
         start_time_utc: None,
         parsed_speed_source: track_overlay::project::SpeedSource::Auto,

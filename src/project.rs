@@ -44,6 +44,14 @@ pub struct SyncState {
     pub max_auto_sync_offset_ms: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub enum InterpolationMode {
+    None,
+    #[default]
+    Linear,
+    Cubic,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProjectConfig {
     pub video_path: PathBuf,
@@ -58,6 +66,10 @@ pub struct ProjectConfig {
     pub export_end_ms: Option<i64>,
     #[serde(default)]
     pub speed_source: SpeedSource,
+    #[serde(default)]
+    pub interpolation_mode: InterpolationMode,
+    #[serde(default)]
+    pub interpolation_points: u8,
 }
 
 impl ProjectConfig {

@@ -81,6 +81,7 @@ pub struct TelemetryState {
 
 #[derive(Clone)]
 pub struct TelemetryLog {
+    pub raw_samples: Vec<TelemetrySample>,
     pub samples: Vec<TelemetrySample>,
     pub start_time_utc: Option<DateTime<Utc>>,
     pub parsed_speed_source: crate::project::SpeedSource,
@@ -185,11 +186,186 @@ impl TelemetryLog {
             });
         }
 
-        Ok(Self {
+        let mut log = Self {
+            raw_samples: samples.clone(),
             samples,
             start_time_utc,
             parsed_speed_source: actual_speed_source,
-        })
+        };
+
+        log.apply_interpolation(&crate::project::InterpolationMode::Linear, 0);
+
+        Ok(log)
+    }
+
+    pub fn apply_interpolation(&mut self, mode: &crate::project::InterpolationMode, points: u8) {
+        if points == 0 || mode == &crate::project::InterpolationMode::None {
+            self.samples = self.raw_samples.clone();
+            return;
+        }
+
+        let num_intervals = (points + 1) as f32;
+        let mut new_samples = Vec::new();
+
+        if self.raw_samples.is_empty() {
+            self.samples = new_samples;
+            return;
+        }
+
+        let n = self.raw_samples.len();
+
+        for i in 0..n - 1 {
+            let p1 = &self.raw_samples[i];
+            let p2 = &self.raw_samples[i + 1];
+
+            new_samples.push(p1.clone());
+
+            let dt = (p2.time_ms - p1.time_ms) as f32;
+            if dt <= 0.0 {
+                continue; // Prevent issues with identical timestamps
+            }
+
+            // Get points for Cubic (Catmull-Rom) interpolation
+            let p0 = if i > 0 { &self.raw_samples[i - 1] } else { p1 };
+            let p3 = if i + 2 < n {
+                &self.raw_samples[i + 2]
+            } else {
+                p2
+            };
+
+            for step in 1..=points {
+                let t = step as f32 / num_intervals;
+
+                let interpolated = match mode {
+                    crate::project::InterpolationMode::Linear => Self::lerp_sample(p1, p2, t),
+                    crate::project::InterpolationMode::Cubic => {
+                        Self::cubic_sample(p0, p1, p2, p3, t)
+                    }
+                    crate::project::InterpolationMode::None => p1.clone(),
+                };
+                new_samples.push(interpolated);
+            }
+        }
+
+        // Add the very last point
+        if let Some(last) = self.raw_samples.last() {
+            new_samples.push(last.clone());
+        }
+
+        self.samples = new_samples;
+    }
+
+    fn lerp(v1: f32, v2: f32, t: f32) -> f32 {
+        v1 + (v2 - v1) * t
+    }
+
+    fn lerp_f64(v1: f64, v2: f64, t: f32) -> f64 {
+        v1 + (v2 - v1) * t as f64
+    }
+
+    fn cubic(v0: f32, v1: f32, v2: f32, v3: f32, t: f32) -> f32 {
+        let t2 = t * t;
+        let t3 = t2 * t;
+        0.5 * ((2.0 * v1)
+            + (-v0 + v2) * t
+            + (2.0 * v0 - 5.0 * v1 + 4.0 * v2 - v3) * t2
+            + (-v0 + 3.0 * v1 - 3.0 * v2 + v3) * t3)
+    }
+
+    fn cubic_f64(v0: f64, v1: f64, v2: f64, v3: f64, t: f32) -> f64 {
+        let t = t as f64;
+        let t2 = t * t;
+        let t3 = t2 * t;
+        0.5 * ((2.0 * v1)
+            + (-v0 + v2) * t
+            + (2.0 * v0 - 5.0 * v1 + 4.0 * v2 - v3) * t2
+            + (-v0 + 3.0 * v1 - 3.0 * v2 + v3) * t3)
+    }
+
+    fn lerp_sample(s1: &TelemetrySample, s2: &TelemetrySample, t: f32) -> TelemetrySample {
+        TelemetrySample {
+            time_ms: s1.time_ms + ((s2.time_ms - s1.time_ms) as f32 * t) as i64,
+            speed_kph: Self::lerp(s1.speed_kph, s2.speed_kph, t),
+            lat: Self::lerp_f64(s1.lat, s2.lat, t),
+            lon: Self::lerp_f64(s1.lon, s2.lon, t),
+            accel_lat_g: Self::lerp(s1.accel_lat_g, s2.accel_lat_g, t),
+            accel_lon_g: Self::lerp(s1.accel_lon_g, s2.accel_lon_g, t),
+            lap_number: s1.lap_number,
+            lap_time_ms: s1.lap_time_ms.map(|l1| {
+                let l2 = s2.lap_time_ms.unwrap_or(l1);
+                l1 + ((l2 - l1) as f32 * t) as i64
+            }),
+            throttle_pct: Self::lerp(s1.throttle_pct, s2.throttle_pct, t),
+            brake: Self::lerp(s1.brake, s2.brake, t),
+            engine_speed_rpm: Self::lerp(s1.engine_speed_rpm, s2.engine_speed_rpm, t),
+            session_distance_m: Self::lerp_f64(s1.session_distance_m, s2.session_distance_m, t),
+            lap_distance_m: Self::lerp_f64(s1.lap_distance_m, s2.lap_distance_m, t),
+        }
+    }
+
+    fn cubic_sample(
+        s0: &TelemetrySample,
+        s1: &TelemetrySample,
+        s2: &TelemetrySample,
+        s3: &TelemetrySample,
+        t: f32,
+    ) -> TelemetrySample {
+        TelemetrySample {
+            time_ms: s1.time_ms + ((s2.time_ms - s1.time_ms) as f32 * t) as i64,
+            speed_kph: Self::cubic(s0.speed_kph, s1.speed_kph, s2.speed_kph, s3.speed_kph, t),
+            lat: Self::cubic_f64(s0.lat, s1.lat, s2.lat, s3.lat, t),
+            lon: Self::cubic_f64(s0.lon, s1.lon, s2.lon, s3.lon, t),
+            accel_lat_g: Self::cubic(
+                s0.accel_lat_g,
+                s1.accel_lat_g,
+                s2.accel_lat_g,
+                s3.accel_lat_g,
+                t,
+            ),
+            accel_lon_g: Self::cubic(
+                s0.accel_lon_g,
+                s1.accel_lon_g,
+                s2.accel_lon_g,
+                s3.accel_lon_g,
+                t,
+            ),
+            lap_number: s1.lap_number,
+            lap_time_ms: s1.lap_time_ms.map(|l1| {
+                let l2 = s2.lap_time_ms.unwrap_or(l1);
+                l1 + ((l2 - l1) as f32 * t) as i64
+            }),
+            throttle_pct: Self::cubic(
+                s0.throttle_pct,
+                s1.throttle_pct,
+                s2.throttle_pct,
+                s3.throttle_pct,
+                t,
+            )
+            .clamp(0.0, 100.0),
+            brake: Self::cubic(s0.brake, s1.brake, s2.brake, s3.brake, t).clamp(0.0, 100.0),
+            engine_speed_rpm: Self::cubic(
+                s0.engine_speed_rpm,
+                s1.engine_speed_rpm,
+                s2.engine_speed_rpm,
+                s3.engine_speed_rpm,
+                t,
+            )
+            .max(0.0),
+            session_distance_m: Self::cubic_f64(
+                s0.session_distance_m,
+                s1.session_distance_m,
+                s2.session_distance_m,
+                s3.session_distance_m,
+                t,
+            ),
+            lap_distance_m: Self::cubic_f64(
+                s0.lap_distance_m,
+                s1.lap_distance_m,
+                s2.lap_distance_m,
+                s3.lap_distance_m,
+                t,
+            ),
+        }
     }
 
     /// Returns a list of (lap_number, start_time_ms) by scanning the samples

@@ -83,6 +83,7 @@ fn test_trackmap_projection() {
     ];
 
     let log = TelemetryLog {
+        raw_samples: samples.clone(),
         samples,
         start_time_utc: None,
         parsed_speed_source: track_overlay::project::SpeedSource::Auto,

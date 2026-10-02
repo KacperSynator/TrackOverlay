@@ -179,6 +179,7 @@ pub fn export_video(
 
     // Build a temporary TelemetryLog to generate trackmap correctly
     let temp_log = crate::telemetry::TelemetryLog {
+        raw_samples: telemetry_view.samples.to_vec(),
         samples: telemetry_view.samples.to_vec(),
         start_time_utc: telemetry_view.start_time_utc,
         parsed_speed_source: crate::project::SpeedSource::Auto,

@@ -131,6 +131,7 @@ impl MyApp {
 
             // Rebuild a temporary TelemetryLog for trackmap creation since from_telemetry requires it currently
             let temp_log = TelemetryLog {
+                raw_samples: view.samples.to_vec(),
                 samples: view.samples.to_vec(),
                 start_time_utc: view.start_time_utc,
                 parsed_speed_source: crate::project::SpeedSource::Auto,

@@ -74,5 +74,7 @@
   "flip_horizontal": false,
   "export_start_ms": null,
   "export_end_ms": null,
-  "speed_source": "Auto"
+  "speed_source": "Auto",
+  "interpolation_mode": "Linear",
+  "interpolation_points": 0
 }
