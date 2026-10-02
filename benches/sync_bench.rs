@@ -55,6 +55,7 @@ fn generate_lap_data(num_laps: u32) -> (Vec<(i64, f64, f64)>, TelemetryLog) {
         time += 10000; // 100 points * 100ms
     }
     let telemetry_data = TelemetryLog {
+        raw_samples: telem_samples.clone(),
         samples: telem_samples,
         start_time_utc: None,
         parsed_speed_source: track_overlay::project::SpeedSource::Auto,
@@ -105,6 +106,7 @@ fn generate_lissajous_data() -> (Vec<(i64, f64, f64)>, TelemetryLog) {
     }
 
     let telemetry = TelemetryLog {
+        raw_samples: samples.clone(),
         samples,
         start_time_utc: None,
         parsed_speed_source: track_overlay::project::SpeedSource::Auto,
