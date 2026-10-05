@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Install minimal stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libavutil-dev libavformat-dev libavcodec-dev libswscale-dev libavdevice-dev libavfilter-dev ffmpeg
+      - name: Build release
+        run: cargo build --release
+      - name: Package Linux binary
+        run: |
+          mkdir -p release-linux
+          cp target/release/track-overlay release-linux/
+          tar -czvf track-overlay-linux-x86_64.tar.gz -C release-linux track-overlay
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: track-overlay-linux-x86_64.tar.gz
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-rust
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-ffmpeg
+            mingw-w64-x86_64-gcc
+      - name: Build release
+        shell: msys2 {0}
+        run: |
+          cargo build --release
+      - name: Package Windows executable and DLLs
+        shell: msys2 {0}
+        run: |
+          mkdir -p release-windows
+          cp target/release/track-overlay.exe release-windows/
+          # Use ldd to find necessary DLLs within the mingw64 environment and copy them
+          ldd target/release/track-overlay.exe | grep "mingw64" | awk '{print $3}' | xargs -I '{}' cp '{}' release-windows/
+          # Ensure essential DLLs are included even if ldd misses them in the initial pass
+          cp /mingw64/bin/avcodec-*.dll release-windows/ || true
+          cp /mingw64/bin/avformat-*.dll release-windows/ || true
+          cp /mingw64/bin/avutil-*.dll release-windows/ || true
+          cp /mingw64/bin/swscale-*.dll release-windows/ || true
+          cp /mingw64/bin/swresample-*.dll release-windows/ || true
+          cp /mingw64/bin/avdevice-*.dll release-windows/ || true
+          cp /mingw64/bin/avfilter-*.dll release-windows/ || true
+          cp /mingw64/bin/libwinpthread-1.dll release-windows/ || true
+      - name: Create Zip Archive
+        run: Compress-Archive -Path release-windows\* -DestinationPath track-overlay-windows-x86_64.zip
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: track-overlay-windows-x86_64.zip
+
+  build-docker:
+    name: Build and Push Docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Extract Tag Name
+        id: get_tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push CPU image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: cpu
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/track-overlay:cpu-${{ env.TAG_NAME }}
+            ghcr.io/${{ github.repository_owner }}/track-overlay:cpu-latest
+      - name: Build and push GPU image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: gpu
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/track-overlay:gpu-${{ env.TAG_NAME }}
+            ghcr.io/${{ github.repository_owner }}/track-overlay:gpu-latest
