@@ -3,6 +3,7 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -47,7 +48,7 @@ Categories=Utility;
 EOF
 
           # Create a dummy icon if none exists
-          touch AppDir/track-overlay.svg
+          echo '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>' > AppDir/track-overlay.svg
 
           # Use linuxdeploy to bundle libraries and generate AppImage
           VERSION=latest ./linuxdeploy --appdir AppDir -d AppDir/track-overlay.desktop -i AppDir/track-overlay.svg --output appimage
@@ -114,7 +115,12 @@ EOF
       - uses: actions/checkout@v4.2.2
       - name: Extract Tag Name
         id: get_tag
-        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        run: |
+          # If triggered by release, this will be the tag. If manual, use the branch/commit hash or a placeholder.
+          RAW_TAG="${GITHUB_REF#refs/tags/}"
+          # Replace slashes with dashes to ensure valid Docker tags when triggered from branches
+          CLEAN_TAG="${RAW_TAG//\//-}"
+          echo "TAG_NAME=${CLEAN_TAG}" >> $GITHUB_ENV
       - name: Set Repository Owner to Lowercase
         run: echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
       - name: Log in to the Container registry
