@@ -2,6 +2,8 @@
 
 A desktop app that overlays TrackAddict CSV telemetry (speed, g-force, lap time, GPS position) onto GoPro MP4 footage, with a real-time preview for syncing video-to-data offset, and a batch export pipeline to render the final video. Auto-sync via GoPro GPMF GPS tracking is also supported!
 
+https://github.com/user-attachments/assets/e30b087c-5991-4af1-8ec0-6edcb665e4a0
+
 ## Features
 
 - **Auto-Sync:** Automatically synchronizes video and telemetry by correlating GoPro GPS (GPMF) data with TrackAddict GPS telemetry.
