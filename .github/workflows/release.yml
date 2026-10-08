@@ -23,15 +23,41 @@ jobs:
           sudo apt-get install -y pkg-config libavutil-dev libavformat-dev libavcodec-dev libswscale-dev libavdevice-dev libavfilter-dev ffmpeg
       - name: Build release
         run: cargo build --release
-      - name: Package Linux binary
+      - name: Setup AppImage Tools
         run: |
-          mkdir -p release-linux
-          cp target/release/track-overlay release-linux/
-          tar -czvf track-overlay-linux-x86_64.tar.gz -C release-linux track-overlay
+          wget -c "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage" -O linuxdeploy
+          wget -c "https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage" -O linuxdeploy-plugin-appimage
+          chmod +x linuxdeploy
+          chmod +x linuxdeploy-plugin-appimage
+      - name: Package Linux binary as AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: |
+          mkdir -p AppDir/usr/bin
+          cp target/release/track-overlay AppDir/usr/bin/
+
+          # Create desktop file
+          cat <<EOF > AppDir/track-overlay.desktop
+[Desktop Entry]
+Name=Track Overlay
+Exec=track-overlay
+Icon=track-overlay
+Type=Application
+Categories=Utility;
+EOF
+
+          # Create a dummy icon if none exists
+          touch AppDir/track-overlay.svg
+
+          # Use linuxdeploy to bundle libraries and generate AppImage
+          VERSION=latest ./linuxdeploy --appdir AppDir -d AppDir/track-overlay.desktop -i AppDir/track-overlay.svg --output appimage
+
+          # Rename the output for clarity
+          mv Track_Overlay-*-x86_64.AppImage track-overlay-linux-x86_64.AppImage
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: track-overlay-linux-x86_64.tar.gz
+          files: track-overlay-linux-x86_64.AppImage
 
   build-windows:
     name: Build Windows
@@ -50,6 +76,7 @@ jobs:
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-ffmpeg
             mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-clang
       - name: Build release
         shell: msys2 {0}
         run: |
@@ -88,6 +115,8 @@ jobs:
       - name: Extract Tag Name
         id: get_tag
         run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+      - name: Set Repository Owner to Lowercase
+        run: echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -101,8 +130,8 @@ jobs:
           target: cpu
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/track-overlay:cpu-${{ env.TAG_NAME }}
-            ghcr.io/${{ github.repository_owner }}/track-overlay:cpu-latest
+            ghcr.io/${{ env.REPO_OWNER }}/track-overlay:cpu-${{ env.TAG_NAME }}
+            ghcr.io/${{ env.REPO_OWNER }}/track-overlay:cpu-latest
       - name: Build and push GPU image
         uses: docker/build-push-action@v6
         with:
@@ -110,5 +139,5 @@ jobs:
           target: gpu
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/track-overlay:gpu-${{ env.TAG_NAME }}
-            ghcr.io/${{ github.repository_owner }}/track-overlay:gpu-latest
+            ghcr.io/${{ env.REPO_OWNER }}/track-overlay:gpu-${{ env.TAG_NAME }}
+            ghcr.io/${{ env.REPO_OWNER }}/track-overlay:gpu-latest
