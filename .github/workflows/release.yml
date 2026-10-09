@@ -68,14 +68,14 @@ jobs:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
-            mingw-w64-x86_64-rust
-            mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-ffmpeg
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-clang
+            mingw-w64-ucrt-x86_64-rust
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-ffmpeg
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-clang
       - name: Build release
         shell: msys2 {0}
         run: |
@@ -85,17 +85,17 @@ jobs:
         run: |
           mkdir -p release-windows
           cp target/release/track-overlay.exe release-windows/
-          # Use ldd to find necessary DLLs within the mingw64 environment and copy them
-          ldd target/release/track-overlay.exe | grep "mingw64" | awk '{print $3}' | xargs -I '{}' cp '{}' release-windows/
+          # Use ldd to find necessary DLLs within the ucrt64 environment and copy them
+          ldd target/release/track-overlay.exe | grep "ucrt64" | awk '{print $3}' | xargs -I '{}' cp '{}' release-windows/
           # Ensure essential DLLs are included even if ldd misses them in the initial pass
-          cp /mingw64/bin/avcodec-*.dll release-windows/ || true
-          cp /mingw64/bin/avformat-*.dll release-windows/ || true
-          cp /mingw64/bin/avutil-*.dll release-windows/ || true
-          cp /mingw64/bin/swscale-*.dll release-windows/ || true
-          cp /mingw64/bin/swresample-*.dll release-windows/ || true
-          cp /mingw64/bin/avdevice-*.dll release-windows/ || true
-          cp /mingw64/bin/avfilter-*.dll release-windows/ || true
-          cp /mingw64/bin/libwinpthread-1.dll release-windows/ || true
+          cp /ucrt64/bin/avcodec-*.dll release-windows/ || true
+          cp /ucrt64/bin/avformat-*.dll release-windows/ || true
+          cp /ucrt64/bin/avutil-*.dll release-windows/ || true
+          cp /ucrt64/bin/swscale-*.dll release-windows/ || true
+          cp /ucrt64/bin/swresample-*.dll release-windows/ || true
+          cp /ucrt64/bin/avdevice-*.dll release-windows/ || true
+          cp /ucrt64/bin/avfilter-*.dll release-windows/ || true
+          cp /ucrt64/bin/libwinpthread-1.dll release-windows/ || true
       - name: Create Zip Archive
         run: Compress-Archive -Path release-windows\* -DestinationPath track-overlay-windows-x86_64.zip
       # - name: Upload to Release
