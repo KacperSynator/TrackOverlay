@@ -3,7 +3,7 @@ name: Release
 on:
   release:
     types: [published]
-  workflow_dispatch:
+  push:
 
 env:
   CARGO_TERM_COLOR: always
@@ -53,10 +53,10 @@ jobs:
 
           # Rename the output for clarity
           mv Track_Overlay-*-x86_64.AppImage track-overlay-linux-x86_64.AppImage
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: track-overlay-linux-x86_64.AppImage
+      # - name: Upload to Release
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     files: track-overlay-linux-x86_64.AppImage
 
   build-windows:
     name: Build Windows
@@ -98,10 +98,10 @@ jobs:
           cp /mingw64/bin/libwinpthread-1.dll release-windows/ || true
       - name: Create Zip Archive
         run: Compress-Archive -Path release-windows\* -DestinationPath track-overlay-windows-x86_64.zip
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: track-overlay-windows-x86_64.zip
+      # - name: Upload to Release
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     files: track-overlay-windows-x86_64.zip
 
   build-docker:
     name: Build and Push Docker
@@ -132,7 +132,7 @@ jobs:
         with:
           context: .
           target: cpu
-          push: true
+          push: false
           tags: |
             ghcr.io/${{ env.REPO_OWNER }}/track-overlay:cpu-${{ env.TAG_NAME }}
             ghcr.io/${{ env.REPO_OWNER }}/track-overlay:cpu-latest
@@ -141,7 +141,7 @@ jobs:
         with:
           context: .
           target: gpu
-          push: true
+          push: false
           tags: |
             ghcr.io/${{ env.REPO_OWNER }}/track-overlay:gpu-${{ env.TAG_NAME }}
             ghcr.io/${{ env.REPO_OWNER }}/track-overlay:gpu-latest
