@@ -76,8 +76,19 @@ jobs:
             mingw-w64-ucrt-x86_64-ffmpeg
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-clang
+      - name: Diagnose clang
+        shell: msys2 {0}
+        run: |
+          which -a clang
+          clang --version
+          clang -print-resource-dir
+          ls /ucrt64/bin | grep -i libclang || true
+          pacman -Q | grep -i -E "clang|llvm"
+          echo "LIBCLANG_PATH=$LIBCLANG_PATH"
       - name: Build release
         shell: msys2 {0}
+        env:
+          LIBCLANG_PATH: /ucrt64/bin
         run: |
           cargo build --release
       - name: Package Windows executable and DLLs
