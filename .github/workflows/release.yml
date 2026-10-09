@@ -38,14 +38,12 @@ jobs:
           cp target/release/track-overlay AppDir/usr/bin/
 
           # Create desktop file
-          cat <<EOF > AppDir/track-overlay.desktop
-[Desktop Entry]
-Name=Track Overlay
-Exec=track-overlay
-Icon=track-overlay
-Type=Application
-Categories=Utility;
-EOF
+          echo "[Desktop Entry]" > AppDir/track-overlay.desktop
+          echo "Name=Track Overlay" >> AppDir/track-overlay.desktop
+          echo "Exec=track-overlay" >> AppDir/track-overlay.desktop
+          echo "Icon=track-overlay" >> AppDir/track-overlay.desktop
+          echo "Type=Application" >> AppDir/track-overlay.desktop
+          echo "Categories=Utility;" >> AppDir/track-overlay.desktop
 
           # Create a dummy icon if none exists
           echo '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>' > AppDir/track-overlay.svg
