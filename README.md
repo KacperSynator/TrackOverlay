@@ -20,9 +20,128 @@ https://github.com/user-attachments/assets/e30b087c-5991-4af1-8ec0-6edcb665e4a0
 - **Track Map** (Driven path visualization)
 - **Throttle Bar**
 
-## Prerequisites
+## Installation & Quick Start
 
-If you plan to run the app natively on your machine, you need:
+You can run the application using pre-built binaries (Windows, Linux), via Docker containers, or by building it from source.
+
+### Pre-built Binaries (Windows & Linux)
+
+Download the latest release artifacts from the [GitHub Releases](https://github.com/KacperSynator/TrackOverlay/releases) page. You will also need a configuration file (like the `default_config.json` provided in this repository).
+
+**Windows:**
+1. Download the `track-overlay-windows-x86_64.zip` file.
+2. Extract the zip archive. Inside, you will find `track-overlay.exe` along with several required `.dll` files.
+3. Open a terminal (Command Prompt or PowerShell), navigate to the extracted folder, and run:
+   ```cmd
+   track-overlay.exe --config default_config.json
+   ```
+
+**Linux (AppImage):**
+1. Download the `track-overlay-linux-x86_64.AppImage` file.
+2. Make the file executable:
+   ```bash
+   chmod +x track-overlay-linux-x86_64.AppImage
+   ```
+3. Run the AppImage:
+   ```bash
+   ./track-overlay-linux-x86_64.AppImage --config default_config.json
+   ```
+
+### Pre-built Docker Images (GHCR)
+
+If you don't want to install anything locally, you can use the pre-built Docker containers available on the GitHub Container Registry (GHCR).
+The app uses an embedded `egui` file picker, so DBus host permissions aren't strictly required.
+
+You can pull either a CPU-only or a GPU-accelerated image:
+
+**Pull CPU-only image:**
+```bash
+docker pull ghcr.io/kacpersynator/track-overlay:cpu-latest
+```
+
+**Pull GPU-accelerated image (Recommended):**
+```bash
+docker pull ghcr.io/kacpersynator/track-overlay:gpu-latest
+```
+
+Because the app is graphical and needs file access, you must map your display server to the container and map a local directory as your data directory so the file picker can access it.
+
+#### 1. CPU-Only Mode
+
+**For X11:**
+```bash
+xhost +local:docker
+docker run --rm \
+  -e DISPLAY=$DISPLAY \
+  -e RUST_LOG=info \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v $(pwd)/data:/app/data \
+  ghcr.io/kacpersynator/track-overlay:cpu-latest --config /app/data/default_config.json --data-dir /app/data
+```
+
+**For Wayland:**
+```bash
+docker run --rm \
+  -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
+  -e XDG_RUNTIME_DIR=/tmp \
+  -e XDG_SESSION_TYPE=wayland \
+  -e WINIT_UNIX_BACKEND=wayland \
+  -e RUST_LOG=info \
+  -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
+  -v $(pwd)/data:/app/data \
+  ghcr.io/kacpersynator/track-overlay:cpu-latest --config /app/data/default_config.json --data-dir /app/data
+```
+
+#### 2. GPU-Accelerated Mode
+
+When running with the GPU-accelerated image, you must pass your host's GPU device to the container.
+
+**For AMD/Intel (Wayland):**
+```bash
+docker run --rm \
+  -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
+  -e XDG_RUNTIME_DIR=/tmp \
+  -e XDG_SESSION_TYPE=wayland \
+  -e WINIT_UNIX_BACKEND=wayland \
+  -e RUST_LOG=info \
+  -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
+  -v $(pwd)/data:/app/data \
+  --device /dev/dri \
+  ghcr.io/kacpersynator/track-overlay:gpu-latest --config /app/data/default_config.json --data-dir /app/data
+```
+
+**For NVIDIA (Wayland, requires NVIDIA Container Toolkit):**
+```bash
+docker run --rm \
+  -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
+  -e XDG_RUNTIME_DIR=/tmp \
+  -e XDG_SESSION_TYPE=wayland \
+  -e WINIT_UNIX_BACKEND=wayland \
+  -e RUST_LOG=info \
+  -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
+  -v $(pwd)/data:/app/data \
+  --gpus all \
+  ghcr.io/kacpersynator/track-overlay:gpu-latest --config /app/data/default_config.json --data-dir /app/data
+```
+
+> **Note on X11 with GPU:** If you are using X11 instead of Wayland, replace the Wayland environment variables and volume mounts with the X11 equivalents shown in the CPU-Only section, while keeping the `--device /dev/dri` or `--gpus all` flags.
+
+#### 3. Export Mode (CLI - No GUI required)
+If you just want to export a project and avoid messing with display servers entirely, you just need to mount your files.
+
+```bash
+docker run --rm \
+  -e RUST_LOG=info \
+  -v $(pwd)/data:/app/data \
+  ghcr.io/kacpersynator/track-overlay:cpu-latest --export /app/data/final_output.mp4 --config /app/data/my_project.json
+```
+
+
+## Building from Source
+
+### Prerequisites
+
+If you plan to compile the app natively on your machine, you need:
 
 - Rust toolchain (stable)
 - FFmpeg development libraries (for video decoding and export)
@@ -35,7 +154,21 @@ sudo apt-get install -y pkg-config libavutil-dev libavformat-dev libavcodec-dev 
 
 Alternatively, you can run the app using **Docker** without installing dependencies natively (see Docker instructions below).
 
-## Running the App Natively
+### Building the Docker Image Locally
+
+You can build the Docker image yourself with CPU-only support or with GPU hardware acceleration support.
+
+**Build CPU-only image:**
+```bash
+docker build --target cpu -t track-overlay:cpu .
+```
+
+**Build GPU-accelerated image:**
+```bash
+docker build --target gpu -t track-overlay:gpu .
+```
+
+### Running the App Natively (from source)
 
 To launch the app (either GUI or CLI), you must provide a required configuration file via the `--config` flag.
 A default layout configuration is provided in the repository as `default_config.json`.
@@ -70,98 +203,6 @@ RUST_LOG=info cargo run --release -- --export final_output.mp4 --config my_proje
 ```
 
 > Note: The export feature wraps around the `ffmpeg` tool.
-
-## Using Docker
-
-If you don't want to install dependencies locally, you can build and run `track-overlay` via Docker. The app uses an embedded `egui` file picker so DBus host permissions aren't strictly required.
-
-### Building the Docker Image
-
-You can build the Docker image with CPU-only support or with GPU hardware acceleration support.
-
-**Build CPU-only image:**
-```bash
-docker build --target cpu -t track-overlay:cpu .
-```
-
-**Build GPU-accelerated image (Recommended for better performance):**
-```bash
-docker build --target gpu -t track-overlay:gpu .
-```
-
-### Running with Docker
-
-Because the app is graphical and needs file access, you must map your display server to the container and map a local directory as your data directory so the file picker can access it.
-
-#### 1. CPU-Only Mode
-
-**For X11:**
-```bash
-xhost +local:docker
-docker run --rm \
-  -e DISPLAY=$DISPLAY \
-  -e RUST_LOG=info \
-  -v /tmp/.X11-unix:/tmp/.X11-unix \
-  -v $(pwd)/data:/app/data \
-  track-overlay:cpu --config /app/data/default_config.json --data-dir /app/data
-```
-
-**For Wayland:**
-```bash
-docker run --rm \
-  -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
-  -e XDG_RUNTIME_DIR=/tmp \
-  -e XDG_SESSION_TYPE=wayland \
-  -e WINIT_UNIX_BACKEND=wayland \
-  -e RUST_LOG=info \
-  -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
-  -v $(pwd)/data:/app/data \
-  track-overlay:cpu --config /app/data/default_config.json --data-dir /app/data
-```
-
-#### 2. GPU-Accelerated Mode
-
-When running with the GPU-accelerated image, you must pass your host's GPU device to the container.
-
-**For AMD/Intel (Wayland):**
-```bash
-docker run --rm \
-  -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
-  -e XDG_RUNTIME_DIR=/tmp \
-  -e XDG_SESSION_TYPE=wayland \
-  -e WINIT_UNIX_BACKEND=wayland \
-  -e RUST_LOG=info \
-  -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
-  -v $(pwd)/data:/app/data \
-  --device /dev/dri \
-  track-overlay:gpu --config /app/data/default_config.json --data-dir /app/data
-```
-
-**For NVIDIA (Wayland, requires NVIDIA Container Toolkit):**
-```bash
-docker run --rm \
-  -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
-  -e XDG_RUNTIME_DIR=/tmp \
-  -e XDG_SESSION_TYPE=wayland \
-  -e WINIT_UNIX_BACKEND=wayland \
-  -e RUST_LOG=info \
-  -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
-  -v $(pwd)/data:/app/data \
-  --gpus all \
-  track-overlay:gpu --config /app/data/default_config.json --data-dir /app/data
-```
-
-> **Note on X11 with GPU:** If you are using X11 instead of Wayland, replace the Wayland environment variables and volume mounts with the X11 equivalents shown in the CPU-Only section, while keeping the `--device /dev/dri` or `--gpus all` flags.
-
-#### 3. Export Mode (CLI - No GUI required)
-If you just want to export a project and avoid messing with display servers entirely, you just need to mount your files.
-
-```bash
-docker run --rm \
-  -e RUST_LOG=info \
-  -v $(pwd)/data:/app/data \
-  track-overlay:cpu --export /app/data/final_output.mp4 --config /app/data/my_project.json
-```
 
 
 ## Tech Stack
