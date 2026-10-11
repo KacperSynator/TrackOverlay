@@ -4,6 +4,22 @@ A desktop app that overlays TrackAddict CSV telemetry (speed, g-force, lap time,
 
 https://github.com/user-attachments/assets/e30b087c-5991-4af1-8ec0-6edcb665e4a0
 
+## Table of Contents
+
+- [Features](#features)
+  - [Available Overlay Elements](#available-overlay-elements)
+- [Installation & Quick Start](#installation--quick-start)
+  - [Pre-built Binaries (Windows & Linux)](#pre-built-binaries-windows--linux)
+  - [Pre-built Docker Images (GHCR)](#pre-built-docker-images-ghcr)
+- [Building from Source](#building-from-source)
+  - [Prerequisites](#prerequisites)
+  - [Building the Docker Image Locally](#building-the-docker-image-locally)
+  - [Running the App Natively (from source)](#running-the-app-natively-from-source)
+- [Command-Line Arguments](#command-line-arguments)
+- [Exporting](#exporting)
+  - [Exporting via CLI](#exporting-via-cli)
+- [Tech Stack](#tech-stack)
+
 ## Features
 
 - **Auto-Sync:** Automatically synchronizes video and telemetry by correlating GoPro GPS (GPMF) data with TrackAddict GPS telemetry.
@@ -65,6 +81,14 @@ docker pull ghcr.io/kacpersynator/track-overlay:gpu-latest
 ```
 
 Because the app is graphical and needs file access, you must map your display server to the container and map a local directory as your data directory so the file picker can access it.
+
+Before running the docker commands, ensure you create a `data` directory (or use an existing one) in your current working directory where you can store your config files, telemetry, and videos:
+
+```bash
+mkdir data
+```
+
+You can also change the `$(pwd)/data` part of the volume mount in the commands below to point to another directory on your machine.
 
 #### 1. CPU-Only Mode
 
@@ -188,6 +212,16 @@ Currently, in GUI mode, you can:
 3. Adjust the sync offset (or use Auto Sync)
 4. Tweak the layout gauges
 5. Click **"Export Final Video"** to export the result.
+
+## Command-Line Arguments
+
+The application accepts several optional command-line arguments to customize its behavior, especially useful for headless exporting or specific setups:
+
+| Argument | Short | Description |
+| :--- | :---: | :--- |
+| `--export <FILE>` | `-e` | Runs the application in "headless export mode". It skips launching the GUI and immediately exports the final video to the specified file path, utilizing the project configuration provided by `--config`. |
+| `--config <FILE>` | `-c` | Specifies the path to the JSON project configuration file. If omitted, the application uses a default empty configuration. |
+| `--data-dir <DIR>` | `-d` | Specifies the default directory used for loading/saving files in the file picker. This can also be set via the `DATA_DIR` environment variable. |
 
 ## Exporting
 
