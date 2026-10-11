@@ -31,10 +31,10 @@ Download the latest release artifacts from the [GitHub Releases](https://github.
 **Windows:**
 1. Download the `track-overlay-windows-x86_64.zip` file.
 2. Extract the zip archive. Inside, you will find `track-overlay.exe` along with several required `.dll` files.
-3. Open a terminal (Command Prompt or PowerShell), navigate to the extracted folder, and run:
-   ```cmd
-   track-overlay.exe --config default_config.json
-   ```
+3. Run the `track-overlay.exe` by double clicking on it. Alternatively you can run it from terminal (cmd/Powershell) using:
+```cmd
+   track-overlay.exe
+```
 
 **Linux (AppImage):**
 1. Download the `track-overlay-linux-x86_64.AppImage` file.
@@ -44,7 +44,7 @@ Download the latest release artifacts from the [GitHub Releases](https://github.
    ```
 3. Run the AppImage:
    ```bash
-   ./track-overlay-linux-x86_64.AppImage --config default_config.json
+   ./track-overlay-linux-x86_64.AppImage
    ```
 
 ### Pre-built Docker Images (GHCR)
@@ -76,7 +76,7 @@ docker run --rm \
   -e RUST_LOG=info \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v $(pwd)/data:/app/data \
-  ghcr.io/kacpersynator/track-overlay:cpu-latest --config /app/data/default_config.json --data-dir /app/data
+  ghcr.io/kacpersynator/track-overlay:cpu-latest --data-dir /app/data
 ```
 
 **For Wayland:**
@@ -89,7 +89,7 @@ docker run --rm \
   -e RUST_LOG=info \
   -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
   -v $(pwd)/data:/app/data \
-  ghcr.io/kacpersynator/track-overlay:cpu-latest --config /app/data/default_config.json --data-dir /app/data
+  ghcr.io/kacpersynator/track-overlay:cpu-latest --data-dir /app/data
 ```
 
 #### 2. GPU-Accelerated Mode
@@ -107,7 +107,7 @@ docker run --rm \
   -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
   -v $(pwd)/data:/app/data \
   --device /dev/dri \
-  ghcr.io/kacpersynator/track-overlay:gpu-latest --config /app/data/default_config.json --data-dir /app/data
+  ghcr.io/kacpersynator/track-overlay:gpu-latest --data-dir /app/data
 ```
 
 **For NVIDIA (Wayland, requires NVIDIA Container Toolkit):**
@@ -121,7 +121,7 @@ docker run --rm \
   -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY \
   -v $(pwd)/data:/app/data \
   --gpus all \
-  ghcr.io/kacpersynator/track-overlay:gpu-latest --config /app/data/default_config.json --data-dir /app/data
+  ghcr.io/kacpersynator/track-overlay:gpu-latest --data-dir /app/data
 ```
 
 > **Note on X11 with GPU:** If you are using X11 instead of Wayland, replace the Wayland environment variables and volume mounts with the X11 equivalents shown in the CPU-Only section, while keeping the `--device /dev/dri` or `--gpus all` flags.
@@ -170,14 +170,13 @@ docker build --target gpu -t track-overlay:gpu .
 
 ### Running the App Natively (from source)
 
-To launch the app (either GUI or CLI), you must provide a required configuration file via the `--config` flag.
-A default layout configuration is provided in the repository as `default_config.json`.
+To launch the app (either GUI or CLI), run:
 
 ```bash
-RUST_LOG=info cargo run --release -- --config default_config.json
+RUST_LOG=info cargo run --release
 ```
 
-You can optionally specify a default directory for loading/saving files using the `--data-dir` argument:
+You can optionally specify a config file using `--config` argument and default directory for loading/saving files using the `--data-dir` argument:
 
 ```bash
 RUST_LOG=info cargo run --release -- --config default_config.json --data-dir /path/to/my/videos
