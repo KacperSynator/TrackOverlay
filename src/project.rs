@@ -31,8 +31,9 @@ pub enum SpeedSource {
     Obd,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum SyncMode {
+    #[default]
     Manual,
     Auto,
 }
@@ -42,6 +43,16 @@ pub struct SyncState {
     pub offset_ms: i64,
     pub mode: SyncMode,
     pub max_auto_sync_offset_ms: i64,
+}
+
+impl Default for SyncState {
+    fn default() -> Self {
+        Self {
+            offset_ms: 0,
+            mode: SyncMode::Manual,
+            max_auto_sync_offset_ms: 300000,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -58,6 +69,22 @@ pub struct ProjectConfig {
     pub export_end_ms: Option<i64>,
     #[serde(default)]
     pub speed_source: SpeedSource,
+}
+
+impl Default for ProjectConfig {
+    fn default() -> Self {
+        Self {
+            video_path: PathBuf::new(),
+            telemetry_path: PathBuf::new(),
+            sync: SyncState::default(),
+            elements: vec![],
+            flip_vertical: false,
+            flip_horizontal: false,
+            export_start_ms: None,
+            export_end_ms: None,
+            speed_source: SpeedSource::Auto,
+        }
+    }
 }
 
 impl ProjectConfig {

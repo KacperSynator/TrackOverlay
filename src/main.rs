@@ -14,7 +14,7 @@ struct Args {
     export: Option<PathBuf>,
 
     #[arg(short, long)]
-    config: PathBuf,
+    config: Option<PathBuf>,
 
     #[arg(short, long, env = "DATA_DIR")]
     data_dir: Option<PathBuf>,
@@ -26,13 +26,18 @@ fn main() -> eframe::Result {
 
     let args = Args::parse();
 
-    info!("Loading config from {:?}", args.config);
-    let config = match ProjectConfig::load(&args.config) {
-        Ok(c) => c,
-        Err(e) => {
-            error!("Failed to load config file {:?}: {}", args.config, e);
-            std::process::exit(1);
+    let config = if let Some(config_path) = &args.config {
+        info!("Loading config from {:?}", config_path);
+        match ProjectConfig::load(config_path) {
+            Ok(c) => c,
+            Err(e) => {
+                error!("Failed to load config file {:?}: {}", config_path, e);
+                std::process::exit(1);
+            }
         }
+    } else {
+        info!("No config file specified, using default config.");
+        ProjectConfig::default()
     };
 
     if let Some(output_path) = args.export {
